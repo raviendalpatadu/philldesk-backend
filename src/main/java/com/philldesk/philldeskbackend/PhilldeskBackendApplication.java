@@ -1,0 +1,13 @@
+package com.philldesk.philldeskbackend;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PhilldeskBackendApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PhilldeskBackendApplication.class, args);
+    }
+
+}
