@@ -48,6 +48,12 @@ public class BillServiceImpl implements BillService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Bill> getBillByIdWithDetails(Long id) {
+        return billRepository.findByIdWithDetails(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<Bill> getBillByPrescription(Prescription prescription) {
         return billRepository.findByPrescription(prescription);
     }

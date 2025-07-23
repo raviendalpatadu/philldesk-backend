@@ -9,13 +9,17 @@ import com.philldesk.philldeskbackend.service.PrescriptionService;
 import com.philldesk.philldeskbackend.service.MedicineService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -38,19 +42,43 @@ public class PrescriptionServiceImpl implements PrescriptionService {
     @Override
     @Transactional(readOnly = true)
     public List<Prescription> getAllPrescriptions() {
-        return prescriptionRepository.findAll();
+        // Use JOIN FETCH to avoid lazy loading issues
+        return prescriptionRepository.findAllWithUserDetailsOrderByCreatedAtDesc();
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<Prescription> getAllPrescriptions(Pageable pageable) {
-        return prescriptionRepository.findAll(pageable);
+        // For paginated results, we need to get all data with JOIN FETCH first
+        // then apply pagination manually to avoid lazy loading issues
+        List<Prescription> allPrescriptions = prescriptionRepository.findAllWithUserDetailsOrderByCreatedAtDesc();
+        
+        // Apply pagination manually
+        int pageSize = pageable.getPageSize();
+        int currentPage = pageable.getPageNumber();
+        int startItem = currentPage * pageSize;
+        
+        List<Prescription> pageContent;
+        if (allPrescriptions.size() < startItem) {
+            pageContent = new ArrayList<>();
+        } else {
+            int toIndex = Math.min(startItem + pageSize, allPrescriptions.size());
+            pageContent = allPrescriptions.subList(startItem, toIndex);
+        }
+        
+        return new PageImpl<>(pageContent, pageable, allPrescriptions.size());
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<Prescription> getPrescriptionById(Long id) {
         return prescriptionRepository.findById(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Prescription> getPrescriptionByIdWithUserDetails(Long id) {
+        return prescriptionRepository.findByIdWithUserDetails(id);
     }
 
     @Override
@@ -62,7 +90,8 @@ public class PrescriptionServiceImpl implements PrescriptionService {
     @Override
     @Transactional(readOnly = true)
     public List<Prescription> getPrescriptionsByCustomerId(Long customerId) {
-        return prescriptionRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+        // Use JOIN FETCH to avoid lazy loading issues
+        return prescriptionRepository.findByCustomerIdWithUserDetailsOrderByCreatedAtDesc(customerId);
     }
 
     @Override
@@ -179,5 +208,95 @@ public class PrescriptionServiceImpl implements PrescriptionService {
     @Transactional(readOnly = true)
     public List<Prescription> searchPrescriptions(String searchTerm) {
         return prescriptionRepository.searchPrescriptions(searchTerm);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Prescription> findById(Long id) {
+        return prescriptionRepository.findById(id);
+    }
+
+    @Override
+    @Transactional
+    public void updateCompletionDetails(Long prescriptionId, Map<String, Object> completionData) {
+        Optional<Prescription> prescriptionOpt = prescriptionRepository.findById(prescriptionId);
+        if (prescriptionOpt.isPresent()) {
+            Prescription prescription = prescriptionOpt.get();
+            
+            // Update notes with completion details
+            String existingNotes = prescription.getNotes() != null ? prescription.getNotes() : "";
+            String instructions = (String) completionData.get("instructions");
+            String followUpDate = (String) completionData.get("followUpDate");
+            String dispensingNotes = (String) completionData.get("dispensingNotes");
+            
+            StringBuilder updatedNotes = new StringBuilder(existingNotes);
+            if (instructions != null && !instructions.isEmpty()) {
+                updatedNotes.append("\n\nCompletion Instructions: ").append(instructions);
+            }
+            if (followUpDate != null && !followUpDate.isEmpty()) {
+                updatedNotes.append("\nFollow-up Date: ").append(followUpDate);
+            }
+            if (dispensingNotes != null && !dispensingNotes.isEmpty()) {
+                updatedNotes.append("\nDispensing Notes: ").append(dispensingNotes);
+            }
+            
+            prescription.setNotes(updatedNotes.toString());
+            prescription.setUpdatedAt(LocalDateTime.now());
+            prescriptionRepository.save(prescription);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void createDispensingRecord(Long prescriptionId, Map<String, Object> dispensingRecord) {
+        Optional<Prescription> prescriptionOpt = prescriptionRepository.findById(prescriptionId);
+        if (prescriptionOpt.isPresent()) {
+            Prescription prescription = prescriptionOpt.get();
+            
+            // Store dispensing record in notes for now (in a real system, create a separate table)
+            String existingNotes = prescription.getNotes() != null ? prescription.getNotes() : "";
+            StringBuilder updatedNotes = new StringBuilder(existingNotes);
+            
+            updatedNotes.append("\n\nDispensing Record:")
+                       .append("\nRecorded At: ").append(dispensingRecord.get("createdAt"))
+                       .append("\nPharmacist Signature: ").append(dispensingRecord.get("pharmacistSignature"))
+                       .append("\nDispensing Date: ").append(dispensingRecord.get("dispensingDate"));
+            
+            prescription.setNotes(updatedNotes.toString());
+            prescription.setUpdatedAt(LocalDateTime.now());
+            prescriptionRepository.save(prescription);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> getCompletionDetails(Long prescriptionId) {
+        Optional<Prescription> prescriptionOpt = prescriptionRepository.findById(prescriptionId);
+        Map<String, Object> completionDetails = new HashMap<>();
+        
+        if (prescriptionOpt.isPresent()) {
+            Prescription prescription = prescriptionOpt.get();
+            completionDetails.put("prescriptionId", prescription.getId());
+            completionDetails.put("status", prescription.getStatus().toString());
+            completionDetails.put("notes", prescription.getNotes());
+            completionDetails.put("updatedAt", prescription.getUpdatedAt());
+            completionDetails.put("approvedAt", prescription.getApprovedAt());
+            
+            if (prescription.getCustomer() != null) {
+                completionDetails.put("customerName", 
+                    prescription.getCustomer().getFirstName() + " " + prescription.getCustomer().getLastName());
+                completionDetails.put("customerEmail", prescription.getCustomer().getEmail());
+            }
+            
+            if (prescription.getPharmacist() != null) {
+                completionDetails.put("pharmacistName", 
+                    prescription.getPharmacist().getFirstName() + " " + prescription.getPharmacist().getLastName());
+            }
+            
+            completionDetails.put("doctorName", prescription.getDoctorName());
+            completionDetails.put("fileName", prescription.getFileName());
+        }
+        
+        return completionDetails;
     }
 }

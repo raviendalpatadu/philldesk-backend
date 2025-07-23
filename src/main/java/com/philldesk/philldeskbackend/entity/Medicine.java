@@ -1,9 +1,12 @@
 package com.philldesk.philldeskbackend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -17,6 +20,8 @@ import java.util.Set;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"prescriptionItems", "billItems"})
+@EqualsAndHashCode(exclude = {"prescriptionItems", "billItems"})
 public class Medicine {
     
     @Id
@@ -69,9 +74,11 @@ public class Medicine {
     private Boolean isActive = true;
     
     @OneToMany(mappedBy = "medicine", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<PrescriptionItem> prescriptionItems;
     
     @OneToMany(mappedBy = "medicine", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<BillItem> billItems;
     
     @CreationTimestamp

@@ -6,6 +6,8 @@ import com.philldesk.philldeskbackend.entity.Medicine;
 import com.philldesk.philldeskbackend.service.PrescriptionItemService;
 import com.philldesk.philldeskbackend.service.PrescriptionService;
 import com.philldesk.philldeskbackend.service.MedicineService;
+import com.philldesk.philldeskbackend.dto.PrescriptionItemDTO;
+import com.philldesk.philldeskbackend.dto.PrescriptionItemBulkUpdateDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/prescription-items")
@@ -106,5 +109,97 @@ public class PrescriptionItemController {
             return ResponseEntity.ok(unavailableItems);
         }
         return ResponseEntity.notFound().build();
+    }
+
+    @PostMapping("/prescription/{prescriptionId}/bulk")
+    public ResponseEntity<List<PrescriptionItem>> createPrescriptionItemsBulk(
+            @PathVariable Long prescriptionId,
+            @RequestBody List<PrescriptionItemDTO> prescriptionItemDTOs) {
+        try {
+            Optional<Prescription> prescription = prescriptionService.getPrescriptionById(prescriptionId);
+            if (prescription.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            List<PrescriptionItem> prescriptionItems = prescriptionItemDTOs.stream()
+                .map(dto -> {
+                    PrescriptionItem item = convertToEntity(dto);
+                    item.setPrescription(prescription.get());
+                    return item;
+                })
+                .toList();
+
+            List<PrescriptionItem> savedItems = prescriptionItems.stream()
+                .map(prescriptionItemService::savePrescriptionItem)
+                .toList();
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedItems);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PutMapping("/prescription/{prescriptionId}/bulk")
+    public ResponseEntity<List<PrescriptionItem>> updatePrescriptionItemsBulk(
+            @PathVariable Long prescriptionId,
+            @RequestBody PrescriptionItemBulkUpdateDTO bulkUpdateDTO) {
+        try {
+            Optional<Prescription> prescription = prescriptionService.getPrescriptionById(prescriptionId);
+            if (prescription.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Delete existing items for this prescription
+            List<PrescriptionItem> existingItems = prescriptionItemService.getPrescriptionItemsByPrescriptionId(prescriptionId);
+            existingItems.forEach(item -> prescriptionItemService.deletePrescriptionItem(item.getId()));
+
+            // Create new items
+            List<PrescriptionItem> newItems = bulkUpdateDTO.getItems().stream()
+                .map(dto -> {
+                    PrescriptionItem item = convertToEntity(dto);
+                    item.setPrescription(prescription.get());
+                    return item;
+                })
+                .toList();
+
+            List<PrescriptionItem> savedItems = newItems.stream()
+                .map(prescriptionItemService::savePrescriptionItem)
+                .toList();
+
+            return ResponseEntity.ok(savedItems);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/prescription/{prescriptionId}/total")
+    public ResponseEntity<BigDecimal> calculatePrescriptionTotal(@PathVariable Long prescriptionId) {
+        try {
+            List<PrescriptionItem> items = prescriptionItemService.getPrescriptionItemsByPrescriptionId(prescriptionId);
+            BigDecimal total = items.stream()
+                .map(item -> item.getUnitPrice().multiply(new BigDecimal(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            return ResponseEntity.ok(total);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    private PrescriptionItem convertToEntity(PrescriptionItemDTO dto) {
+        PrescriptionItem item = new PrescriptionItem();
+        item.setQuantity(dto.getQuantity());
+        item.setInstructions(dto.getInstructions());
+        item.setUnitPrice(dto.getUnitPrice());
+        
+        if (dto.getMedicineId() != null) {
+            Optional<Medicine> medicine = medicineService.getMedicineById(dto.getMedicineId());
+            if (medicine.isPresent()) {
+                item.setMedicine(medicine.get());
+            } else {
+                throw new IllegalArgumentException("Medicine not found with ID: " + dto.getMedicineId());
+            }
+        }
+
+        return item;
     }
 }

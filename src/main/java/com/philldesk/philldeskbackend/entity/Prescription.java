@@ -3,9 +3,14 @@ package com.philldesk.philldeskbackend.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -15,6 +20,9 @@ import java.util.Set;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"customer", "pharmacist", "prescriptionItems", "bill"})
+@EqualsAndHashCode(exclude = {"prescriptionItems", "bill"})
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Prescription {
     
     @Id
@@ -26,10 +34,12 @@ public class Prescription {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id", nullable = false)
+    @JsonIgnoreProperties({"prescriptions", "handledPrescriptions", "notifications", "password"})
     private User customer;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "pharmacist_id")
+    @JsonIgnoreProperties({"prescriptions", "handledPrescriptions", "notifications", "password"})
     private User pharmacist;
     
     @Column(name = "doctor_name", length = 100)
@@ -61,9 +71,11 @@ public class Prescription {
     private String rejectionReason;
     
     @OneToMany(mappedBy = "prescription", cascade = CascadeType.ALL)
+    @JsonManagedReference
     private Set<PrescriptionItem> prescriptionItems;
     
     @OneToOne(mappedBy = "prescription", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties({"prescription"})
     private Bill bill;
     
     @CreationTimestamp

@@ -7,12 +7,15 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface PrescriptionService {
     List<Prescription> getAllPrescriptions();
     Page<Prescription> getAllPrescriptions(Pageable pageable);
     Optional<Prescription> getPrescriptionById(Long id);
+    Optional<Prescription> findById(Long id);
+    Optional<Prescription> getPrescriptionByIdWithUserDetails(Long id);
     List<Prescription> getPrescriptionsByCustomer(User customer);
     List<Prescription> getPrescriptionsByCustomerId(Long customerId);
     List<Prescription> getPrescriptionsByPharmacist(User pharmacist);
@@ -29,4 +32,9 @@ public interface PrescriptionService {
     void assignPharmacist(Long prescriptionId, Long pharmacistId);
     boolean canBeFulfilled(Long prescriptionId);
     List<Prescription> searchPrescriptions(String searchTerm);
+    
+    // Enhanced completion methods
+    void updateCompletionDetails(Long prescriptionId, Map<String, Object> completionData);
+    void createDispensingRecord(Long prescriptionId, Map<String, Object> dispensingRecord);
+    Map<String, Object> getCompletionDetails(Long prescriptionId);
 }

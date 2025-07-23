@@ -19,3 +19,40 @@ INSERT INTO medicines (name, generic_name, manufacturer, category, dosage_form, 
 ('Aspirin', 'Acetylsalicylic Acid', 'Bayer', 'Pain Relief', 'Tablet', '300mg', 90, 28.00, 22.00, '2025-11-25', 30, FALSE, 'Pain relief and blood thinner'),
 ('Metformin', 'Metformin HCl', 'Local Pharma', 'Diabetes', 'Tablet', '500mg', 70, 45.00, 35.00, '2025-07-18', 25, TRUE, 'Medication for type 2 diabetes'),
 ('Losartan', 'Losartan Potassium', 'Teva', 'Blood Pressure', 'Tablet', '50mg', 55, 95.00, 75.00, '2025-12-05', 20, TRUE, 'ACE inhibitor for high blood pressure');
+
+-- Sample bills for testing payment functionality
+-- Note: These will only work if you have sample users and prescriptions already
+-- Bill 1: Pending bill for customer testing
+INSERT INTO bills (bill_number, customer_id, pharmacist_id, prescription_id, subtotal, discount, tax, total_amount, payment_status, payment_type, notes) VALUES 
+('BILL-2025-001', 
+ (SELECT id FROM users WHERE username = 'customer' LIMIT 1),
+ (SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = 'PHARMACIST') LIMIT 1),
+ NULL,
+ 150.00, 10.00, 15.60, 155.60, 'PENDING', 'PAY_ON_PICKUP', 'Sample bill for testing payment functionality')
+ON CONFLICT (bill_number) DO NOTHING;
+
+-- Bill 2: Another pending bill set for online payment
+INSERT INTO bills (bill_number, customer_id, pharmacist_id, prescription_id, subtotal, discount, tax, total_amount, payment_status, payment_type, notes) VALUES 
+('BILL-2025-002', 
+ (SELECT id FROM users WHERE username = 'customer' LIMIT 1),
+ (SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = 'PHARMACIST') LIMIT 1),
+ NULL,
+ 85.00, 0.00, 8.50, 93.50, 'PENDING', 'ONLINE', 'Online payment test bill')
+ON CONFLICT (bill_number) DO NOTHING;
+
+-- Bill 3: Paid bill for history viewing
+INSERT INTO bills (bill_number, customer_id, pharmacist_id, prescription_id, subtotal, discount, tax, total_amount, payment_status, payment_method, payment_type, paid_at, notes) VALUES 
+('BILL-2025-003', 
+ (SELECT id FROM users WHERE username = 'customer' LIMIT 1),
+ (SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = 'PHARMACIST') LIMIT 1),
+ NULL,
+ 75.00, 5.00, 7.50, 77.50, 'PAID', 'ONLINE', 'ONLINE', CURRENT_TIMESTAMP - INTERVAL '2 days', 'Completed online payment')
+ON CONFLICT (bill_number) DO NOTHING;
+
+-- Sample bill items for the bills above
+INSERT INTO bill_items (bill_id, medicine_id, quantity, unit_price, total_price) VALUES 
+((SELECT id FROM bills WHERE bill_number = 'BILL-2025-001'), (SELECT id FROM medicines WHERE name = 'Panadol' LIMIT 1), 2, 25.00, 50.00),
+((SELECT id FROM bills WHERE bill_number = 'BILL-2025-001'), (SELECT id FROM medicines WHERE name = 'Amoxil' LIMIT 1), 1, 155.50, 155.50),
+((SELECT id FROM bills WHERE bill_number = 'BILL-2025-002'), (SELECT id FROM medicines WHERE name = 'Voltaren' LIMIT 1), 1, 85.00, 85.00),
+((SELECT id FROM bills WHERE bill_number = 'BILL-2025-003'), (SELECT id FROM medicines WHERE name = 'Omeprazole' LIMIT 1), 1, 75.00, 75.00)
+ON CONFLICT DO NOTHING;

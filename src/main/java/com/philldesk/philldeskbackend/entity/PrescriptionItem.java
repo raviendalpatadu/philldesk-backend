@@ -3,7 +3,11 @@ package com.philldesk.philldeskbackend.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.math.BigDecimal;
 
@@ -12,6 +16,8 @@ import java.math.BigDecimal;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"prescription", "medicine"})
+@EqualsAndHashCode(exclude = {"prescription"})
 public class PrescriptionItem {
     
     @Id
@@ -20,10 +26,12 @@ public class PrescriptionItem {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "prescription_id", nullable = false)
+    @JsonBackReference
     private Prescription prescription;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "medicine_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Medicine medicine;
     
     @Column(nullable = false)

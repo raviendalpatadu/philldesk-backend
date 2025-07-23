@@ -1,9 +1,12 @@
 package com.philldesk.philldeskbackend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 import java.util.Set;
 
 @Entity
@@ -11,6 +14,8 @@ import java.util.Set;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"users"})
+@EqualsAndHashCode(exclude = {"users"})
 public class Role {
     
     @Id
@@ -25,6 +30,7 @@ public class Role {
     private String description;
     
     @OneToMany(mappedBy = "role", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<User> users;
     
     public enum RoleName {

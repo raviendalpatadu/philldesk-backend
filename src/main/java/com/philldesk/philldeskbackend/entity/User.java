@@ -1,5 +1,6 @@
 package com.philldesk.philldeskbackend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -15,6 +16,8 @@ import java.util.Set;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"prescriptions", "handledPrescriptions", "notifications"})
+@EqualsAndHashCode(exclude = {"prescriptions", "handledPrescriptions", "notifications"})
 public class User {
     
     @Id
@@ -50,12 +53,15 @@ public class User {
     private Role role;
     
     @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<Prescription> prescriptions;
     
     @OneToMany(mappedBy = "pharmacist", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<Prescription> handledPrescriptions;
     
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<Notification> notifications;
     
     @CreationTimestamp

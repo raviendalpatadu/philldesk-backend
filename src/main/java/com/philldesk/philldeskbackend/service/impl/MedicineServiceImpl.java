@@ -3,9 +3,6 @@ package com.philldesk.philldeskbackend.service.impl;
 import com.philldesk.philldeskbackend.entity.Medicine;
 import com.philldesk.philldeskbackend.repository.MedicineRepository;
 import com.philldesk.philldeskbackend.service.MedicineService;
-import com.philldesk.philldeskbackend.service.NotificationService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,15 +18,11 @@ import java.util.Optional;
 @Transactional
 public class MedicineServiceImpl implements MedicineService {
 
-    private static final Logger logger = LoggerFactory.getLogger(MedicineServiceImpl.class);
-    
     private final MedicineRepository medicineRepository;
-    private final NotificationService notificationService;
 
     @Autowired
-    public MedicineServiceImpl(MedicineRepository medicineRepository, NotificationService notificationService) {
+    public MedicineServiceImpl(MedicineRepository medicineRepository) {
         this.medicineRepository = medicineRepository;
-        this.notificationService = notificationService;
     }
 
     @Override
@@ -124,10 +117,7 @@ public class MedicineServiceImpl implements MedicineService {
             Medicine existingMedicine = medicine.get();
             existingMedicine.setQuantity(newQuantity);
             existingMedicine.setUpdatedAt(LocalDateTime.now());
-            Medicine savedMedicine = medicineRepository.save(existingMedicine);
-            
-            // Check for low stock and trigger notification if needed
-            checkAndNotifyLowStock(savedMedicine);
+            medicineRepository.save(existingMedicine);
         }
     }
 
@@ -140,10 +130,7 @@ public class MedicineServiceImpl implements MedicineService {
             if (currentStock >= quantity) {
                 existingMedicine.setQuantity(currentStock - quantity);
                 existingMedicine.setUpdatedAt(LocalDateTime.now());
-                Medicine savedMedicine = medicineRepository.save(existingMedicine);
-                
-                // Check for low stock and trigger notification if needed
-                checkAndNotifyLowStock(savedMedicine);
+                medicineRepository.save(existingMedicine);
             } else {
                 throw new IllegalArgumentException("Insufficient stock. Available: " + currentStock + ", Requested: " + quantity);
             }
@@ -159,11 +146,7 @@ public class MedicineServiceImpl implements MedicineService {
             Medicine existingMedicine = medicine.get();
             existingMedicine.setQuantity(existingMedicine.getQuantity() + quantity);
             existingMedicine.setUpdatedAt(LocalDateTime.now());
-            Medicine savedMedicine = medicineRepository.save(existingMedicine);
-            
-            // Note: After increasing stock, we generally won't have low stock, 
-            // but including this for consistency and in case reorder levels change
-            checkAndNotifyLowStock(savedMedicine);
+            medicineRepository.save(existingMedicine);
         } else {
             throw new IllegalArgumentException("Medicine not found with ID: " + medicineId);
         }
@@ -181,21 +164,5 @@ public class MedicineServiceImpl implements MedicineService {
     public boolean existsByName(String name) {
         Optional<Medicine> medicine = medicineRepository.findByNameAndIsActiveTrue(name);
         return medicine.isPresent();
-    }
-
-    /**
-     * Helper method to check if medicine is low on stock and trigger notification
-     * This method is called after every stock update operation
-     */
-    private void checkAndNotifyLowStock(Medicine medicine) {
-        if (medicine.isLowStock()) {
-            try {
-                notificationService.createLowStockNotification(medicine.getId());
-            } catch (Exception e) {
-                // Log the error but don't fail the stock operation
-                logger.error("Failed to create low stock notification for medicine ID: {}. Error: {}", 
-                           medicine.getId(), e.getMessage(), e);
-            }
-        }
     }
 }

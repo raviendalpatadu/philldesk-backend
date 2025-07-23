@@ -101,6 +101,20 @@ public class MedicineController {
         return ResponseEntity.ok(medicines);
     }
 
+    @GetMapping("/search/suggestions")
+    public ResponseEntity<List<Medicine>> getMedicineSuggestions(@RequestParam String query) {
+        // Enhanced search for auto-suggestions
+        List<Medicine> medicines = medicineService.searchMedicines(query);
+        
+        // Limit to top 10 results for performance
+        List<Medicine> suggestions = medicines.stream()
+            .filter(medicine -> medicine.getIsActive())
+            .limit(10)
+            .toList();
+            
+        return ResponseEntity.ok(suggestions);
+    }
+
     @PostMapping
     public ResponseEntity<Medicine> createMedicine(@RequestBody Medicine medicine) {
         try {

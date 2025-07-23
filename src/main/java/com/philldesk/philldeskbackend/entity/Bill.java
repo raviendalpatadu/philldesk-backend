@@ -3,7 +3,9 @@ package com.philldesk.philldeskbackend.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -16,6 +18,8 @@ import java.util.Set;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"prescription", "customer", "billItems"})
+@EqualsAndHashCode(exclude = {"billItems"})
 public class Bill {
     
     @Id
@@ -25,19 +29,19 @@ public class Bill {
     @Column(name = "bill_number", unique = true, nullable = false, length = 50)
     private String billNumber;
     
-    @OneToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "prescription_id")
     private Prescription prescription;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "customer_id", nullable = false)
     private User customer;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "pharmacist_id", nullable = false)
     private User pharmacist;
     
-    @OneToMany(mappedBy = "bill", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "bill", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private Set<BillItem> billItems;
     
     @Column(name = "subtotal", nullable = false, precision = 10, scale = 2)
@@ -59,6 +63,10 @@ public class Bill {
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method")
     private PaymentMethod paymentMethod;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_type")
+    private PaymentType paymentType = PaymentType.PAY_ON_PICKUP;
     
     @Column(length = 500)
     private String notes;
@@ -85,7 +93,13 @@ public class Bill {
         CASH,
         CARD,
         BANK_TRANSFER,
+        ONLINE,
         OTHER
+    }
+    
+    public enum PaymentType {
+        ONLINE,
+        PAY_ON_PICKUP
     }
     
     // Calculate total amount before saving

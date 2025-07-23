@@ -15,6 +15,7 @@ public interface BillService {
     List<Bill> getAllBills();
     Page<Bill> getAllBills(Pageable pageable);
     Optional<Bill> getBillById(Long id);
+    Optional<Bill> getBillByIdWithDetails(Long id);
     Optional<Bill> getBillByPrescription(Prescription prescription);
     List<Bill> getBillsByCustomer(User customer);
     List<Bill> getBillsByCustomerId(Long customerId);
