@@ -108,7 +108,7 @@ public class MedicineController {
         
         // Limit to top 10 results for performance
         List<Medicine> suggestions = medicines.stream()
-            .filter(medicine -> medicine.getIsActive())
+            .filter(medicine -> medicine.getIsActive() && !medicine.isExpired())
             .limit(10)
             .toList();
             

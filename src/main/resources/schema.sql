@@ -81,7 +81,7 @@ CREATE TABLE prescriptions (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     approved_at TIMESTAMP,
-    CONSTRAINT chk_prescription_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'DISPENSED', 'COMPLETED'))
+    CONSTRAINT chk_prescription_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'DISPENSED', 'COMPLETED', 'READY_FOR_PICKUP'))
 );
 
 -- ==============================================
@@ -120,7 +120,7 @@ CREATE TABLE bills (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     paid_at TIMESTAMP,
     CONSTRAINT chk_payment_status CHECK (payment_status IN ('PENDING', 'PAID', 'PARTIALLY_PAID', 'CANCELLED')),
-    CONSTRAINT chk_payment_method CHECK (payment_method IN ('CASH', 'CARD', 'BANK_TRANSFER', 'OTHER'))
+    CONSTRAINT chk_payment_method CHECK (payment_method IN ('CASH', 'CARD','ONLINE', 'BANK_TRANSFER', 'OTHER'))
 );
 
 -- ==============================================

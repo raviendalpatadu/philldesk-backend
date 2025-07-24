@@ -30,10 +30,10 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, Long
     @Query("SELECT p FROM Prescription p WHERE p.customer.id = :customerId ORDER BY p.createdAt DESC")
     List<Prescription> findByCustomerIdOrderByCreatedAtDesc(@Param("customerId") Long customerId);
     
-    @Query("SELECT p FROM Prescription p JOIN FETCH p.customer LEFT JOIN FETCH p.pharmacist WHERE p.customer.id = :customerId ORDER BY p.createdAt DESC")
+    @Query("SELECT p FROM Prescription p JOIN FETCH p.customer LEFT JOIN FETCH p.pharmacist LEFT JOIN FETCH p.prescriptionItems pi LEFT JOIN FETCH pi.medicine WHERE p.customer.id = :customerId ORDER BY p.createdAt DESC")
     List<Prescription> findByCustomerIdWithUserDetailsOrderByCreatedAtDesc(@Param("customerId") Long customerId);
     
-    @Query("SELECT p FROM Prescription p JOIN FETCH p.customer LEFT JOIN FETCH p.pharmacist WHERE p.id = :id")
+    @Query("SELECT p FROM Prescription p JOIN FETCH p.customer LEFT JOIN FETCH p.pharmacist LEFT JOIN FETCH p.prescriptionItems pi LEFT JOIN FETCH pi.medicine WHERE p.id = :id")
     Optional<Prescription> findByIdWithUserDetails(@Param("id") Long id);
     
     @Query("SELECT p FROM Prescription p WHERE p.pharmacist.id = :pharmacistId ORDER BY p.createdAt DESC")
@@ -55,10 +55,15 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, Long
     @Query("SELECT COUNT(p) FROM Prescription p WHERE p.pharmacist.id = :pharmacistId")
     Long countByPharmacistId(@Param("pharmacistId") Long pharmacistId);
     
-    @Query("SELECT p FROM Prescription p JOIN FETCH p.customer LEFT JOIN FETCH p.pharmacist ORDER BY p.createdAt DESC")
+    @Query("SELECT p FROM Prescription p JOIN FETCH p.customer LEFT JOIN FETCH p.pharmacist LEFT JOIN FETCH p.prescriptionItems pi LEFT JOIN FETCH pi.medicine ORDER BY p.createdAt DESC")
     List<Prescription> findAllWithUserDetailsOrderByCreatedAtDesc();
     
-    @Query("SELECT p FROM Prescription p WHERE " +
+    @Query("SELECT p FROM Prescription p " +
+           "JOIN FETCH p.customer " +
+           "LEFT JOIN FETCH p.pharmacist " +
+           "LEFT JOIN FETCH p.prescriptionItems pi " +
+           "LEFT JOIN FETCH pi.medicine " +
+           "WHERE " +
            "(LOWER(p.prescriptionNumber) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
            "LOWER(p.customer.firstName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
            "LOWER(p.customer.lastName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +

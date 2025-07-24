@@ -1,5 +1,6 @@
 package com.philldesk.philldeskbackend.controller;
 
+import com.philldesk.philldeskbackend.dto.ReadyForPickupPrescriptionDTO;
 import com.philldesk.philldeskbackend.entity.Prescription;
 import com.philldesk.philldeskbackend.entity.Medicine;
 import com.philldesk.philldeskbackend.entity.User;
@@ -13,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,6 +30,7 @@ import java.util.Optional;
 public class PharmacistController {
 
     private static final String MESSAGE_KEY = "message";
+    private static final Logger logger = LoggerFactory.getLogger(PharmacistController.class);
 
     private final PrescriptionService prescriptionService;
     private final MedicineService medicineService;
@@ -60,7 +64,7 @@ public class PharmacistController {
                 .filter(p -> p.getStatus() == Prescription.PrescriptionStatus.APPROVED)
                 .count());
             stats.put("readyForPickup", allPrescriptions.stream()
-                .filter(p -> p.getStatus() == Prescription.PrescriptionStatus.DISPENSED)
+                .filter(p -> p.getStatus() == Prescription.PrescriptionStatus.READY_FOR_PICKUP)
                 .count());
             stats.put("completed", prescriptionService.getCompletedPrescriptions().size());
             
@@ -167,10 +171,17 @@ public class PharmacistController {
             
             Prescription prescription = prescriptionOpt.get();
             Prescription.PrescriptionStatus newStatus;
+
+            // check for prescrition items
+            if (prescription.getPrescriptionItems().isEmpty()){
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Prescrition Items must be selected and saved "));
+            }
             
             switch (decision.toLowerCase()) {
                 case "approve":
                 case "approve_hold":
+
                     newStatus = Prescription.PrescriptionStatus.APPROVED;
                     prescription.setApprovedAt(LocalDateTime.now());
                     if (notes != null) {
@@ -183,16 +194,29 @@ public class PharmacistController {
                     
                     // Automatically create bill for approved prescription
                     try {
+                        // Check if prescription has items before generating bill
+                        if (prescription.getPrescriptionItems() == null || prescription.getPrescriptionItems().isEmpty()) {
+                            Map<String, String> response = new HashMap<>();
+                            response.put(MESSAGE_KEY, "Prescription approved successfully, but no prescription items found. Please add medicines before generating bill.");
+                            response.put("status", newStatus.toString());
+                            response.put("decision", decision);
+                            response.put("warning", "No prescription items - bill not generated");
+                            return ResponseEntity.ok(response);
+                        }
+                        
                         // Check if bill already exists for this prescription
                         Optional<Bill> existingBill = billService.getBillByPrescription(prescription);
                         if (existingBill.isEmpty()) {
                             Bill newBill = billService.generateBillFromPrescription(prescription);
                             Map<String, String> response = new HashMap<>();
-                            response.put(MESSAGE_KEY, "Prescription approved successfully and bill created");
+                            response.put(MESSAGE_KEY, "Prescription approved successfully and bill created with " + 
+                                prescription.getPrescriptionItems().size() + " item(s)");
                             response.put("status", newStatus.toString());
                             response.put("decision", decision);
                             response.put("billId", newBill.getId().toString());
                             response.put("billNumber", newBill.getBillNumber());
+                            response.put("billItemsCount", String.valueOf(prescription.getPrescriptionItems().size()));
+                            response.put("totalAmount", newBill.getTotalAmount().toString());
                             return ResponseEntity.ok(response);
                         } else {
                             Map<String, String> response = new HashMap<>();
@@ -200,6 +224,7 @@ public class PharmacistController {
                             response.put("status", newStatus.toString());
                             response.put("decision", decision);
                             response.put("existingBillId", existingBill.get().getId().toString());
+                            response.put("existingBillNumber", existingBill.get().getBillNumber());
                             return ResponseEntity.ok(response);
                         }
                     } catch (Exception billException) {
@@ -259,11 +284,150 @@ public class PharmacistController {
     @PostMapping("/prescriptions/{id}/ready")
     public ResponseEntity<Map<String, String>> markReadyForPickup(@PathVariable Long id) {
         try {
-            prescriptionService.updateStatus(id, Prescription.PrescriptionStatus.DISPENSED);
+            // Enhanced payment validation logic
+            billService.getBillByPrescription(prescriptionService.getPrescriptionById(id).orElseThrow())
+                .ifPresent(bill -> {
+                    if (bill.getPaymentType() == Bill.PaymentType.ONLINE && bill.getPaymentStatus() != Bill.PaymentStatus.PAID) {
+                        throw new IllegalStateException("Cannot mark prescription as ready for pickup - online payment not completed");
+                    }
+                    // For PAY_ON_PICKUP, we allow the prescription to be marked ready even with PENDING payment
+                    // Payment will be collected when customer arrives
+                });
+
+            // stock should get reduced before marking as ready
+            prescriptionService.getPrescriptionById(id).ifPresent(prescription -> {
+                prescription.getPrescriptionItems().forEach(item -> {
+                    Medicine medicine = medicineService.getMedicineById(item.getMedicine().getId())
+                        .orElseThrow(() -> new IllegalStateException("Medicine not found: " + item.getMedicine().getId()));
+                    if (medicine.getQuantity() < item.getQuantity()) {
+                        throw new IllegalStateException("Insufficient stock for medicine: " + medicine.getName());
+                    }
+                    medicineService.reduceStock(medicine.getId(), item.getQuantity());
+                });
+            });
+
+            // Update prescription status to READY_FOR_PICKUP instead of DISPENSED
+            prescriptionService.updateStatus(id, Prescription.PrescriptionStatus.READY_FOR_PICKUP);
             Map<String, String> response = new HashMap<>();
             response.put(MESSAGE_KEY, "Prescription marked as ready for pickup");
+            response.put("status", "READY_FOR_PICKUP");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("Error marking prescription {} as ready for pickup: {}", id, e.getMessage(), e);
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to mark prescription as ready: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    /**
+     * Collect payment for a prescription when customer arrives for pickup
+     */
+    @PostMapping("/prescriptions/{id}/collect-payment")
+    public ResponseEntity<Map<String, Object>> collectPayment(
+            @PathVariable Long id, 
+            @RequestBody Map<String, String> paymentData) {
+        try {
+            String paymentMethod = paymentData.get("paymentMethod");
+            String notes = paymentData.get("notes");
+            
+            if (paymentMethod == null || paymentMethod.trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Payment method is required");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // Get the prescription and associated bill
+            Optional<Prescription> prescriptionOpt = prescriptionService.getPrescriptionById(id);
+            if (prescriptionOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Prescription prescription = prescriptionOpt.get();
+            
+            // Check if prescription is ready for pickup
+            if (prescription.getStatus() != Prescription.PrescriptionStatus.READY_FOR_PICKUP) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Prescription is not ready for pickup");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // Get the associated bill
+            Optional<Bill> billOpt = billService.getBillByPrescription(prescription);
+            if (billOpt.isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "No bill found for this prescription");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            Bill bill = billOpt.get();
+            
+            // Check if bill is set for pay on pickup and still pending
+            if (bill.getPaymentType() != Bill.PaymentType.PAY_ON_PICKUP) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "This bill is not set for pay on pickup");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            if (bill.getPaymentStatus() != Bill.PaymentStatus.PENDING) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Payment has already been processed");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // Process the payment
+            Bill.PaymentMethod method = Bill.PaymentMethod.valueOf(paymentMethod.toUpperCase());
+            billService.markAsPaid(bill.getId(), method);
+            
+            // Update prescription status to DISPENSED
+            prescriptionService.updateStatus(id, Prescription.PrescriptionStatus.DISPENSED);
+            
+            // Add notes if provided
+            if (notes != null && !notes.trim().isEmpty()) {
+                bill.setNotes(bill.getNotes() != null ? bill.getNotes() + "; Pickup: " + notes : "Pickup: " + notes);
+                billService.updateBill(bill);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put(MESSAGE_KEY, "Payment collected successfully and prescription dispensed");
+            response.put("billId", bill.getId());
+            response.put("amount", bill.getTotalAmount());
+            response.put("paymentMethod", paymentMethod);
+            response.put("prescriptionStatus", "DISPENSED");
+            response.put("paymentStatus", "PAID");
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalArgumentException e) {
+            logger.error("Invalid payment method for prescription {}: {}", id, e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Invalid payment method: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            logger.error("Error collecting payment for prescription {}: {}", id, e.getMessage(), e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to collect payment: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    /**
+     * Get prescriptions ready for pickup (awaiting payment collection)
+     */
+    @GetMapping("/prescriptions/ready-for-pickup")
+    public ResponseEntity<List<ReadyForPickupPrescriptionDTO>> getPrescriptionsReadyForPickup() {
+        try {
+            List<Prescription> readyPrescriptions = prescriptionService.getPrescriptionsByStatus(
+                Prescription.PrescriptionStatus.READY_FOR_PICKUP
+            );
+            
+            // Convert to DTOs to avoid nested serialization issues
+            List<ReadyForPickupPrescriptionDTO> dtos = readyPrescriptions.stream()
+                .map(ReadyForPickupPrescriptionDTO::fromPrescription)
+                .toList();
+                
+            return ResponseEntity.ok(dtos);
+        } catch (Exception e) {
+            logger.error("Error fetching prescriptions ready for pickup: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

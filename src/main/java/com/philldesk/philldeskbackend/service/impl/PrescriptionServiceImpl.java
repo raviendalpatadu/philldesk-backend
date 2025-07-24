@@ -72,7 +72,7 @@ public class PrescriptionServiceImpl implements PrescriptionService {
     @Override
     @Transactional(readOnly = true)
     public Optional<Prescription> getPrescriptionById(Long id) {
-        return prescriptionRepository.findById(id);
+        return prescriptionRepository.findByIdWithUserDetails(id);
     }
 
     @Override

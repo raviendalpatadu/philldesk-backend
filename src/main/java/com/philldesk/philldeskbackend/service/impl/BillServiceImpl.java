@@ -1,11 +1,16 @@
 package com.philldesk.philldeskbackend.service.impl;
 
+import com.philldesk.philldeskbackend.dto.BillProjection;
 import com.philldesk.philldeskbackend.entity.*;
 import com.philldesk.philldeskbackend.repository.BillRepository;
+import com.philldesk.philldeskbackend.repository.UserRepository;
+import com.philldesk.philldeskbackend.security.UserPrincipal;
 import com.philldesk.philldeskbackend.service.BillService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,10 +27,12 @@ import java.util.Set;
 public class BillServiceImpl implements BillService {
 
     private final BillRepository billRepository;
+    private final UserRepository userRepository;
 
     @Autowired
-    public BillServiceImpl(BillRepository billRepository) {
+    public BillServiceImpl(BillRepository billRepository, UserRepository userRepository) {
         this.billRepository = billRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -115,23 +122,74 @@ public class BillServiceImpl implements BillService {
         Set<BillItem> billItems = new HashSet<>();
         BigDecimal subtotal = BigDecimal.ZERO;
         
-        for (PrescriptionItem prescriptionItem : prescription.getPrescriptionItems()) {
-            BillItem billItem = new BillItem();
-            billItem.setBill(bill);
-            billItem.setMedicine(prescriptionItem.getMedicine());
-            billItem.setQuantity(prescriptionItem.getQuantity());
-            billItem.setUnitPrice(prescriptionItem.getMedicine().getUnitPrice());
-            billItem.setTotalPrice(prescriptionItem.getMedicine().getUnitPrice()
-                    .multiply(BigDecimal.valueOf(prescriptionItem.getQuantity())));
-            
-            billItems.add(billItem);
-            subtotal = subtotal.add(billItem.getTotalPrice());
+        // Ensure prescription items exist before creating bill items
+        if (prescription.getPrescriptionItems() != null && !prescription.getPrescriptionItems().isEmpty()) {
+            for (PrescriptionItem prescriptionItem : prescription.getPrescriptionItems()) {
+                BillItem billItem = new BillItem();
+                billItem.setBill(bill);
+                billItem.setMedicine(prescriptionItem.getMedicine());
+                billItem.setQuantity(prescriptionItem.getQuantity());
+                
+                // Use the unit price from prescription item if available, otherwise from medicine
+                BigDecimal unitPrice = prescriptionItem.getUnitPrice() != null ? 
+                    prescriptionItem.getUnitPrice() : prescriptionItem.getMedicine().getUnitPrice();
+                billItem.setUnitPrice(unitPrice);
+                
+                // Calculate total price for this item
+                BigDecimal itemTotal = unitPrice.multiply(BigDecimal.valueOf(prescriptionItem.getQuantity()));
+                billItem.setTotalPrice(itemTotal);
+                
+                // Add prescription item specific details to bill item
+                if (prescriptionItem.getInstructions() != null && !prescriptionItem.getInstructions().trim().isEmpty()) {
+                    String notes = "Instructions: " + prescriptionItem.getInstructions();
+                    if (prescriptionItem.getDosage() != null && !prescriptionItem.getDosage().trim().isEmpty()) {
+                        notes += " | Dosage: " + prescriptionItem.getDosage();
+                    }
+                    if (prescriptionItem.getFrequency() != null && !prescriptionItem.getFrequency().trim().isEmpty()) {
+                        notes += " | Frequency: " + prescriptionItem.getFrequency();
+                    }
+                    billItem.setNotes(notes);
+                } else if (prescriptionItem.getDosage() != null && !prescriptionItem.getDosage().trim().isEmpty()) {
+                    String notes = "Dosage: " + prescriptionItem.getDosage();
+                    if (prescriptionItem.getFrequency() != null && !prescriptionItem.getFrequency().trim().isEmpty()) {
+                        notes += " | Frequency: " + prescriptionItem.getFrequency();
+                    }
+                    billItem.setNotes(notes);
+                } else if (prescriptionItem.getFrequency() != null && !prescriptionItem.getFrequency().trim().isEmpty()) {
+                    billItem.setNotes("Frequency: " + prescriptionItem.getFrequency());
+                }
+                
+                // Add batch number if available from prescription item or medicine
+                if (prescriptionItem.getMedicine().getBatchNumber() != null) {
+                    billItem.setBatchNumber(prescriptionItem.getMedicine().getBatchNumber());
+                }
+                
+                billItems.add(billItem);
+                subtotal = subtotal.add(itemTotal);
+            }
+        } else {
+            // Log warning if no prescription items found
+            System.out.println("Warning: No prescription items found for prescription ID: " + prescription.getId());
         }
         
         bill.setBillItems(billItems);
         bill.setSubtotal(subtotal);
         bill.setDiscount(BigDecimal.ZERO);
-        bill.setTax(BigDecimal.ZERO);
+        
+        // Calculate tax (10% of subtotal)
+        BigDecimal taxAmount = subtotal.multiply(new BigDecimal("0.10"));
+        bill.setTax(taxAmount);
+
+        // get pharmacist data from the token
+        SecurityContext securityContext = SecurityContextHolder.getContext();
+        if (securityContext.getAuthentication() != null && securityContext.getAuthentication().getPrincipal() instanceof UserPrincipal) {
+            UserPrincipal authenticatedUser =  (UserPrincipal) securityContext.getAuthentication().getPrincipal();
+            // map UserPrinciple to User
+            User user = userRepository.findById(authenticatedUser.getId())
+                    .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+
+            bill.setPharmacist(user);
+        }
         
         return saveBill(bill);
     }

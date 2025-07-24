@@ -32,12 +32,12 @@ public class Prescription {
     @Column(name = "prescription_number", unique = true, nullable = false, length = 50)
     private String prescriptionNumber;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "customer_id", nullable = false)
     @JsonIgnoreProperties({"prescriptions", "handledPrescriptions", "notifications", "password"})
     private User customer;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "pharmacist_id")
     @JsonIgnoreProperties({"prescriptions", "handledPrescriptions", "notifications", "password"})
     private User pharmacist;
@@ -70,7 +70,7 @@ public class Prescription {
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
     
-    @OneToMany(mappedBy = "prescription", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "prescription", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JsonManagedReference
     private Set<PrescriptionItem> prescriptionItems;
     
@@ -93,6 +93,7 @@ public class Prescription {
         PENDING,
         APPROVED,
         REJECTED,
+        READY_FOR_PICKUP,
         DISPENSED,
         COMPLETED
     }

@@ -7,6 +7,7 @@ import com.philldesk.philldeskbackend.service.PrescriptionItemService;
 import com.philldesk.philldeskbackend.service.PrescriptionService;
 import com.philldesk.philldeskbackend.service.MedicineService;
 import com.philldesk.philldeskbackend.dto.PrescriptionItemDTO;
+import com.philldesk.philldeskbackend.dto.PrescriptionItemResponseDTO;
 import com.philldesk.philldeskbackend.dto.PrescriptionItemBulkUpdateDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -49,9 +50,12 @@ public class PrescriptionItemController {
     }
 
     @GetMapping("/prescription/{prescriptionId}")
-    public ResponseEntity<List<PrescriptionItem>> getPrescriptionItemsByPrescription(@PathVariable Long prescriptionId) {
+    public ResponseEntity<List<PrescriptionItemResponseDTO>> getPrescriptionItemsByPrescription(@PathVariable Long prescriptionId) {
         List<PrescriptionItem> items = prescriptionItemService.getPrescriptionItemsByPrescriptionId(prescriptionId);
-        return ResponseEntity.ok(items);
+        List<PrescriptionItemResponseDTO> responseDTOs = items.stream()
+            .map(PrescriptionItemResponseDTO::fromEntity)
+            .toList();
+        return ResponseEntity.ok(responseDTOs);
     }
 
     @GetMapping("/medicine/{medicineId}")
@@ -112,7 +116,7 @@ public class PrescriptionItemController {
     }
 
     @PostMapping("/prescription/{prescriptionId}/bulk")
-    public ResponseEntity<List<PrescriptionItem>> createPrescriptionItemsBulk(
+    public ResponseEntity<List<PrescriptionItemResponseDTO>> createPrescriptionItemsBulk(
             @PathVariable Long prescriptionId,
             @RequestBody List<PrescriptionItemDTO> prescriptionItemDTOs) {
         try {
@@ -132,15 +136,19 @@ public class PrescriptionItemController {
             List<PrescriptionItem> savedItems = prescriptionItems.stream()
                 .map(prescriptionItemService::savePrescriptionItem)
                 .toList();
+                
+            List<PrescriptionItemResponseDTO> responseDTOs = savedItems.stream()
+                .map(PrescriptionItemResponseDTO::fromEntity)
+                .toList();
 
-            return ResponseEntity.status(HttpStatus.CREATED).body(savedItems);
+            return ResponseEntity.status(HttpStatus.CREATED).body(responseDTOs);
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }
     }
 
     @PutMapping("/prescription/{prescriptionId}/bulk")
-    public ResponseEntity<List<PrescriptionItem>> updatePrescriptionItemsBulk(
+    public ResponseEntity<List<PrescriptionItemResponseDTO>> updatePrescriptionItemsBulk(
             @PathVariable Long prescriptionId,
             @RequestBody PrescriptionItemBulkUpdateDTO bulkUpdateDTO) {
         try {
@@ -165,8 +173,12 @@ public class PrescriptionItemController {
             List<PrescriptionItem> savedItems = newItems.stream()
                 .map(prescriptionItemService::savePrescriptionItem)
                 .toList();
+                
+            List<PrescriptionItemResponseDTO> responseDTOs = savedItems.stream()
+                .map(PrescriptionItemResponseDTO::fromEntity)
+                .toList();
 
-            return ResponseEntity.ok(savedItems);
+            return ResponseEntity.ok(responseDTOs);
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }
@@ -188,6 +200,8 @@ public class PrescriptionItemController {
     private PrescriptionItem convertToEntity(PrescriptionItemDTO dto) {
         PrescriptionItem item = new PrescriptionItem();
         item.setQuantity(dto.getQuantity());
+        item.setDosage(dto.getDosage());
+        item.setFrequency(dto.getFrequency());
         item.setInstructions(dto.getInstructions());
         item.setUnitPrice(dto.getUnitPrice());
         

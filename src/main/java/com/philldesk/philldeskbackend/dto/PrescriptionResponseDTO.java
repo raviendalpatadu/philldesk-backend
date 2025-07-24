@@ -4,6 +4,7 @@ import com.philldesk.philldeskbackend.entity.Prescription;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class PrescriptionResponseDTO {
@@ -29,6 +30,9 @@ public class PrescriptionResponseDTO {
     // Pharmacist basic info (avoid full user object)
     private Long pharmacistId;
     private String pharmacistName;
+    
+    // Prescription items
+    private List<PrescriptionItemResponseDTO> prescriptionItems;
 
     public static PrescriptionResponseDTO fromEntity(Prescription prescription) {
         PrescriptionResponseDTO dto = new PrescriptionResponseDTO();
@@ -61,6 +65,15 @@ public class PrescriptionResponseDTO {
             String firstName = prescription.getPharmacist().getFirstName() != null ? prescription.getPharmacist().getFirstName() : "";
             String lastName = prescription.getPharmacist().getLastName() != null ? prescription.getPharmacist().getLastName() : "";
             dto.setPharmacistName((firstName + " " + lastName).trim());
+        }
+        
+        // Transform prescription items to DTOs
+        if (prescription.getPrescriptionItems() != null) {
+            dto.setPrescriptionItems(
+                prescription.getPrescriptionItems().stream()
+                    .map(PrescriptionItemResponseDTO::fromEntity)
+                    .toList()
+            );
         }
         
         return dto;

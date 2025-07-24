@@ -1,5 +1,6 @@
 package com.philldesk.philldeskbackend.controller;
 
+import com.philldesk.philldeskbackend.dto.BillResponseDTO;
 import com.philldesk.philldeskbackend.entity.Bill;
 import com.philldesk.philldeskbackend.entity.Prescription;
 import com.philldesk.philldeskbackend.service.BillService;
@@ -34,13 +35,16 @@ public class BillController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Bill>> getAllBills() {
+    public ResponseEntity<List<BillResponseDTO>> getAllBills() {
         List<Bill> bills = billService.getAllBills();
-        return ResponseEntity.ok(bills);
+        List<BillResponseDTO> billDTOs = bills.stream()
+                .map(BillResponseDTO::fromEntity)
+                .toList();
+        return ResponseEntity.ok(billDTOs);
     }
 
     @GetMapping("/paged")
-    public ResponseEntity<Page<Bill>> getAllBills(
+    public ResponseEntity<Page<BillResponseDTO>> getAllBills(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
@@ -52,98 +56,120 @@ public class BillController {
         
         Pageable pageable = PageRequest.of(page, size, sort);
         Page<Bill> bills = billService.getAllBills(pageable);
-        return ResponseEntity.ok(bills);
+        Page<BillResponseDTO> billDTOs = bills.map(BillResponseDTO::fromEntity);
+        return ResponseEntity.ok(billDTOs);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Bill> getBillById(@PathVariable Long id) {
+    public ResponseEntity<BillResponseDTO> getBillById(@PathVariable Long id) {
         Optional<Bill> bill = billService.getBillById(id);
-        return bill.map(ResponseEntity::ok)
+        return bill.map(b -> ResponseEntity.ok(BillResponseDTO.fromEntity(b)))
                   .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/prescription/{prescriptionId}")
-    public ResponseEntity<Bill> getBillByPrescription(@PathVariable Long prescriptionId) {
+    public ResponseEntity<BillResponseDTO> getBillByPrescription(@PathVariable Long prescriptionId) {
         Optional<Prescription> prescription = prescriptionService.getPrescriptionById(prescriptionId);
         if (prescription.isPresent()) {
             Optional<Bill> bill = billService.getBillByPrescription(prescription.get());
-            return bill.map(ResponseEntity::ok)
+            return bill.map(b -> ResponseEntity.ok(BillResponseDTO.fromEntity(b)))
                       .orElse(ResponseEntity.notFound().build());
         }
         return ResponseEntity.notFound().build();
     }
 
     @GetMapping("/customer/{customerId}")
-    public ResponseEntity<List<Bill>> getBillsByCustomer(@PathVariable Long customerId) {
+    public ResponseEntity<List<BillResponseDTO>> getBillsByCustomer(@PathVariable Long customerId) {
         List<Bill> bills = billService.getBillsByCustomerId(customerId);
-        return ResponseEntity.ok(bills);
+        List<BillResponseDTO> billDTOs = bills.stream()
+                .map(BillResponseDTO::fromEntity)
+                .toList();
+        return ResponseEntity.ok(billDTOs);
     }
 
     @GetMapping("/status/{status}")
-    public ResponseEntity<List<Bill>> getBillsByStatus(@PathVariable String status) {
+    public ResponseEntity<List<BillResponseDTO>> getBillsByStatus(@PathVariable String status) {
         try {
             Bill.PaymentStatus paymentStatus = Bill.PaymentStatus.valueOf(status.toUpperCase());
             List<Bill> bills = billService.getBillsByStatus(paymentStatus);
-            return ResponseEntity.ok(bills);
+            List<BillResponseDTO> billDTOs = bills.stream()
+                    .map(BillResponseDTO::fromEntity)
+                    .toList();
+            return ResponseEntity.ok(billDTOs);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         }
     }
 
     @GetMapping("/payment-method/{method}")
-    public ResponseEntity<List<Bill>> getBillsByPaymentMethod(@PathVariable String method) {
+    public ResponseEntity<List<BillResponseDTO>> getBillsByPaymentMethod(@PathVariable String method) {
         try {
             Bill.PaymentMethod paymentMethod = Bill.PaymentMethod.valueOf(method.toUpperCase());
             List<Bill> bills = billService.getBillsByPaymentMethod(paymentMethod);
-            return ResponseEntity.ok(bills);
+            List<BillResponseDTO> billDTOs = bills.stream()
+                    .map(BillResponseDTO::fromEntity)
+                    .toList();
+            return ResponseEntity.ok(billDTOs);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         }
     }
 
     @GetMapping("/date-range")
-    public ResponseEntity<List<Bill>> getBillsByDateRange(
+    public ResponseEntity<List<BillResponseDTO>> getBillsByDateRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         List<Bill> bills = billService.getBillsByDateRange(startDate, endDate);
-        return ResponseEntity.ok(bills);
+        List<BillResponseDTO> billDTOs = bills.stream()
+                .map(BillResponseDTO::fromEntity)
+                .toList();
+        return ResponseEntity.ok(billDTOs);
     }
 
     @GetMapping("/pending")
-    public ResponseEntity<List<Bill>> getPendingBills() {
+    public ResponseEntity<List<BillResponseDTO>> getPendingBills() {
         List<Bill> bills = billService.getPendingBills();
-        return ResponseEntity.ok(bills);
+        List<BillResponseDTO> billDTOs = bills.stream()
+                .map(bill -> BillResponseDTO.fromEntity(bill, true)) // Exclude bill items
+                .toList();
+        return ResponseEntity.ok(billDTOs);
     }
 
     @GetMapping("/paid")
-    public ResponseEntity<List<Bill>> getPaidBills() {
+    public ResponseEntity<List<BillResponseDTO>> getPaidBills() {
         List<Bill> bills = billService.getPaidBills();
-        return ResponseEntity.ok(bills);
+        List<BillResponseDTO> billDTOs = bills.stream()
+                .map(bill -> BillResponseDTO.fromEntity(bill, true)) // Exclude bill items
+                .toList();
+        return ResponseEntity.ok(billDTOs);
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<Bill>> searchBills(@RequestParam String searchTerm) {
+    public ResponseEntity<List<BillResponseDTO>> searchBills(@RequestParam String searchTerm) {
         List<Bill> bills = billService.searchBills(searchTerm);
-        return ResponseEntity.ok(bills);
+        List<BillResponseDTO> billDTOs = bills.stream()
+                .map(BillResponseDTO::fromEntity)
+                .toList();
+        return ResponseEntity.ok(billDTOs);
     }
 
     @PostMapping
-    public ResponseEntity<Bill> createBill(@RequestBody Bill bill) {
+    public ResponseEntity<BillResponseDTO> createBill(@RequestBody Bill bill) {
         try {
             Bill savedBill = billService.saveBill(bill);
-            return ResponseEntity.status(HttpStatus.CREATED).body(savedBill);
+            return ResponseEntity.status(HttpStatus.CREATED).body(BillResponseDTO.fromEntity(savedBill));
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }
     }
 
     @PostMapping("/generate/{prescriptionId}")
-    public ResponseEntity<Bill> generateBillFromPrescription(@PathVariable Long prescriptionId) {
+    public ResponseEntity<BillResponseDTO> generateBillFromPrescription(@PathVariable Long prescriptionId) {
         Optional<Prescription> prescription = prescriptionService.getPrescriptionById(prescriptionId);
         if (prescription.isPresent()) {
             try {
                 Bill generatedBill = billService.generateBillFromPrescription(prescription.get());
-                return ResponseEntity.status(HttpStatus.CREATED).body(generatedBill);
+                return ResponseEntity.status(HttpStatus.CREATED).body(BillResponseDTO.fromEntity(generatedBill));
             } catch (Exception e) {
                 return ResponseEntity.badRequest().build();
             }
@@ -152,12 +178,12 @@ public class BillController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Bill> updateBill(@PathVariable Long id, @RequestBody Bill bill) {
+    public ResponseEntity<BillResponseDTO> updateBill(@PathVariable Long id, @RequestBody Bill bill) {
         Optional<Bill> existingBill = billService.getBillById(id);
         if (existingBill.isPresent()) {
             bill.setId(id);
             Bill updatedBill = billService.updateBill(bill);
-            return ResponseEntity.ok(updatedBill);
+            return ResponseEntity.ok(BillResponseDTO.fromEntity(updatedBill));
         }
         return ResponseEntity.notFound().build();
     }

@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.EqualsAndHashCode;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.math.BigDecimal;
 
@@ -24,10 +26,12 @@ public class BillItem {
     
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "bill_id", nullable = false)
+    @JsonBackReference
     private Bill bill;
     
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "medicine_id", nullable = false)
+    @JsonIgnoreProperties({"prescriptionItems", "billItems"})
     private Medicine medicine;
     
     @Column(nullable = false)

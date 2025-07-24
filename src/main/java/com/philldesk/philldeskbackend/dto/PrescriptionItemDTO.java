@@ -5,14 +5,18 @@ import java.math.BigDecimal;
 public class PrescriptionItemDTO {
     private Long medicineId;
     private Integer quantity;
+    private String dosage;
+    private String frequency;
     private String instructions;
     private BigDecimal unitPrice;
 
     public PrescriptionItemDTO() {}
 
-    public PrescriptionItemDTO(Long medicineId, Integer quantity, String instructions, BigDecimal unitPrice) {
+    public PrescriptionItemDTO(Long medicineId, Integer quantity, String dosage, String frequency, String instructions, BigDecimal unitPrice) {
         this.medicineId = medicineId;
         this.quantity = quantity;
+        this.dosage = dosage;
+        this.frequency = frequency;
         this.instructions = instructions;
         this.unitPrice = unitPrice;
     }
@@ -31,6 +35,22 @@ public class PrescriptionItemDTO {
 
     public void setQuantity(Integer quantity) {
         this.quantity = quantity;
+    }
+
+    public String getDosage() {
+        return dosage;
+    }
+
+    public void setDosage(String dosage) {
+        this.dosage = dosage;
+    }
+
+    public String getFrequency() {
+        return frequency;
+    }
+
+    public void setFrequency(String frequency) {
+        this.frequency = frequency;
     }
 
     public String getInstructions() {

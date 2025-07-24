@@ -8,6 +8,9 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -31,17 +34,21 @@ public class Bill {
     
     @OneToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "prescription_id")
+    @JsonBackReference
     private Prescription prescription;
     
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "customer_id", nullable = false)
+    @JsonIgnoreProperties({"prescriptions", "handledPrescriptions", "notifications", "password"})
     private User customer;
     
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "pharmacist_id", nullable = false)
+    @JsonIgnoreProperties({"prescriptions", "handledPrescriptions", "notifications", "password"})
     private User pharmacist;
     
     @OneToMany(mappedBy = "bill", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JsonManagedReference
     private Set<BillItem> billItems;
     
     @Column(name = "subtotal", nullable = false, precision = 10, scale = 2)

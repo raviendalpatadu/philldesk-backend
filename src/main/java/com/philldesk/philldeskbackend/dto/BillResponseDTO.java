@@ -30,6 +30,10 @@ public class BillResponseDTO {
     private List<BillItemResponseDTO> billItems;
 
     public static BillResponseDTO fromEntity(Bill bill) {
+        return fromEntity(bill, true);
+    }
+    
+    public static BillResponseDTO fromEntity(Bill bill, boolean includeBillItems) {
         if (bill == null) {
             return null;
         }
@@ -62,8 +66,8 @@ public class BillResponseDTO {
         dto.setUpdatedAt(bill.getUpdatedAt());
         dto.setPaidAt(bill.getPaidAt());
         
-        // Safe conversion of bill items
-        if (bill.getBillItems() != null) {
+        // Only include bill items if requested (to avoid lazy loading issues)
+        if (includeBillItems && bill.getBillItems() != null) {
             dto.setBillItems(bill.getBillItems().stream()
                 .map(BillItemResponseDTO::fromEntity)
                 .toList());
@@ -77,9 +81,13 @@ public class BillResponseDTO {
         private Long id;
         private Long medicineId;
         private String medicineName;
+        private String manufacturer;
+        private String strength;
+        private String batchNumber;
         private Integer quantity;
         private BigDecimal unitPrice;
         private BigDecimal totalPrice;
+        private String notes;
 
         public static BillItemResponseDTO fromEntity(BillItem billItem) {
             if (billItem == null) {
@@ -98,7 +106,11 @@ public class BillResponseDTO {
             dto.setQuantity(billItem.getQuantity());
             dto.setUnitPrice(billItem.getUnitPrice());
             dto.setTotalPrice(billItem.getTotalPrice());
-            
+            dto.setNotes(billItem.getNotes());
+            dto.setBatchNumber(billItem.getMedicine().getBatchNumber());
+            dto.setManufacturer(billItem.getMedicine().getManufacturer());
+            dto.setStrength(billItem.getMedicine().getStrength());
+
             return dto;
         }
     }
