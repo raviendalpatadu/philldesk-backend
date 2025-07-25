@@ -178,15 +178,16 @@ public class PharmacistController {
             Prescription prescription = prescriptionOpt.get();
             Prescription.PrescriptionStatus newStatus;
 
-            // check for prescrition items
-            if (prescription.getPrescriptionItems().isEmpty()){
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of("error", "Prescrition Items must be selected and saved "));
-            }
             
             switch (decision.toLowerCase()) {
                 case "approve":
                 case "approve_hold":
+
+                    // check for prescrition items
+                    if (prescription.getPrescriptionItems().isEmpty()){
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", "Prescrition Items must be selected and saved "));
+                    }
 
                     newStatus = Prescription.PrescriptionStatus.APPROVED;
                     prescription.setApprovedAt(LocalDateTime.now());

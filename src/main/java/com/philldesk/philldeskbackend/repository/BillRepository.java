@@ -96,4 +96,19 @@ public interface BillRepository extends JpaRepository<Bill, Long> {
                      "FROM Bill b LEFT JOIN b.customer c LEFT JOIN b.prescription p " +
                      "WHERE b.paymentStatus = :status ORDER BY b.createdAt DESC")
        List<BillProjection> findBillProjectionsByPaymentStatus(@Param("status") Bill.PaymentStatus status);
+
+       // Scheduled task queries for pay-on-pickup bills
+       @Query("SELECT b FROM Bill b LEFT JOIN FETCH b.billItems bi LEFT JOIN FETCH bi.medicine " +
+                     "LEFT JOIN FETCH b.prescription " +
+                     "WHERE b.paymentType = 'PAY_ON_PICKUP' " +
+                     "AND b.paymentStatus = 'PENDING' " +
+                     "AND b.createdAt < :cutoffDate " +
+                     "ORDER BY b.createdAt ASC")
+       List<Bill> findExpiredPayOnPickupBills(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+       @Query("SELECT COUNT(b) FROM Bill b " +
+                     "WHERE b.paymentType = 'PAY_ON_PICKUP' " +
+                     "AND b.paymentStatus = 'PENDING' " +
+                     "AND b.createdAt < :cutoffDate")
+       Long countExpiredPayOnPickupBills(@Param("cutoffDate") LocalDateTime cutoffDate);
 }

@@ -24,6 +24,7 @@ public interface NotificationService {
     void markAllAsReadForUser(Long userId);
     void createNotification(Long userId, String title, String message, Notification.NotificationType type);
     void createLowStockNotification(Long medicineId);
+    void createExpiryAlertNotification(Long medicineId);
     void createPrescriptionNotification(Long prescriptionId, String message, Notification.NotificationType type);
     Long getUnreadCountForUser(Long userId);
 }

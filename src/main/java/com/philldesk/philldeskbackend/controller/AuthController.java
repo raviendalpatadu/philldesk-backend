@@ -4,6 +4,8 @@ import com.philldesk.philldeskbackend.dto.ApiResponse;
 import com.philldesk.philldeskbackend.dto.JwtResponse;
 import com.philldesk.philldeskbackend.dto.LoginRequest;
 import com.philldesk.philldeskbackend.dto.SignupRequest;
+import com.philldesk.philldeskbackend.dto.UserUpdateDTO;
+import com.philldesk.philldeskbackend.dto.PasswordChangeDTO;
 import com.philldesk.philldeskbackend.entity.Role;
 import com.philldesk.philldeskbackend.entity.User;
 import com.philldesk.philldeskbackend.repository.RoleRepository;
@@ -19,7 +21,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -27,6 +31,8 @@ import java.util.List;
 public class AuthController {
     
     private static final String ROLE_NOT_FOUND_ERROR = "Error: Role is not found.";
+    private static final String USER_NOT_FOUND_ERROR = "User not found";
+    private static final String MESSAGE_KEY = "message";
     
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
@@ -115,5 +121,101 @@ public class AuthController {
         userRepository.save(user);
 
         return ResponseEntity.ok(new ApiResponse<>(true, "User registered successfully!", null));
+    }
+
+    /**
+     * Get current user profile
+     */
+    @GetMapping("/profile")
+    public ResponseEntity<User> getCurrentUserProfile() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+            Long userId = userPrincipal.getId();
+            
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_ERROR));
+                
+            // Remove password from response
+            user.setPassword(null);
+            
+            return ResponseEntity.ok(user);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
+     * Update current user profile
+     */
+    @PutMapping("/profile")
+    public ResponseEntity<User> updateUserProfile(@Valid @RequestBody UserUpdateDTO updateDTO) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+            Long userId = userPrincipal.getId();
+            
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_ERROR));
+            
+            // Update fields if provided
+            if (updateDTO.getFirstName() != null) {
+                user.setFirstName(updateDTO.getFirstName());
+            }
+            if (updateDTO.getLastName() != null) {
+                user.setLastName(updateDTO.getLastName());
+            }
+            if (updateDTO.getPhone() != null) {
+                user.setPhone(updateDTO.getPhone());
+            }
+            if (updateDTO.getAddress() != null) {
+                user.setAddress(updateDTO.getAddress());
+            }
+            
+            User updatedUser = userRepository.save(user);
+            updatedUser.setPassword(null); // Remove password from response
+            
+            return ResponseEntity.ok(updatedUser);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
+     * Change user password
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, String>> changePassword(@Valid @RequestBody PasswordChangeDTO passwordChangeDTO) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+            Long userId = userPrincipal.getId();
+            
+            String oldPassword = passwordChangeDTO.getOldPassword();
+            String newPassword = passwordChangeDTO.getNewPassword();
+            
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND_ERROR));
+            
+            // Verify old password
+            if (!encoder.matches(oldPassword, user.getPassword())) {
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put(MESSAGE_KEY, "Current password is incorrect");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            // Update password
+            user.setPassword(encoder.encode(newPassword));
+            userRepository.save(user);
+            
+            Map<String, String> response = new HashMap<>();
+            response.put(MESSAGE_KEY, "Password changed successfully");
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put(MESSAGE_KEY, "Failed to change password");
+            return ResponseEntity.status(500).body(errorResponse);
+        }
     }
 }

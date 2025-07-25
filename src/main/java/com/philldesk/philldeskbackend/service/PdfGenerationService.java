@@ -22,4 +22,14 @@ public interface PdfGenerationService {
      * @throws Exception if PDF generation fails
      */
     byte[] generateReceiptPdf(Bill bill) throws Exception;
+    
+    /**
+     * Generate PDF report with custom data
+     * @param reportTitle The title of the report
+     * @param reportData The data to include in the report
+     * @param dateRange The date range for the report
+     * @return PDF content as byte array
+     * @throws Exception if PDF generation fails
+     */
+    byte[] generateReportPdf(String reportTitle, Object reportData, String dateRange) throws Exception;
 }

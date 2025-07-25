@@ -22,6 +22,8 @@ import java.util.Optional;
 @Service
 @Transactional
 public class NotificationServiceImpl implements NotificationService {
+    
+    private static final String MEDICINE_REFERENCE_TYPE = "MEDICINE";
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
@@ -161,7 +163,7 @@ public class NotificationServiceImpl implements NotificationService {
                 notification.setNotificationType(Notification.NotificationType.LOW_STOCK);
                 notification.setPriority(Notification.Priority.HIGH);
                 notification.setReferenceId(medicineId);
-                notification.setReferenceType("MEDICINE");
+                notification.setReferenceType(MEDICINE_REFERENCE_TYPE);
                 saveNotification(notification);
             }
             
@@ -173,7 +175,48 @@ public class NotificationServiceImpl implements NotificationService {
                 notification.setNotificationType(Notification.NotificationType.LOW_STOCK);
                 notification.setPriority(Notification.Priority.HIGH);
                 notification.setReferenceId(medicineId);
-                notification.setReferenceType("MEDICINE");
+                notification.setReferenceType(MEDICINE_REFERENCE_TYPE);
+                saveNotification(notification);
+            }
+        }
+    }
+
+    @Override
+    public void createExpiryAlertNotification(Long medicineId) {
+        Optional<Medicine> medicine = medicineRepository.findById(medicineId);
+        if (medicine.isPresent()) {
+            Medicine med = medicine.get();
+            String title = "Medicine Expiry Alert";
+            String message = String.format("Medicine '%s' (Batch: %s) is expiring soon. Expiry date: %s", 
+                    med.getName(), 
+                    med.getBatchNumber() != null ? med.getBatchNumber() : "N/A", 
+                    med.getExpiryDate());
+            
+            // Notify all pharmacists and admins
+            List<User> pharmacists = userRepository.findByRoleName(com.philldesk.philldeskbackend.entity.Role.RoleName.PHARMACIST);
+            List<User> admins = userRepository.findByRoleName(com.philldesk.philldeskbackend.entity.Role.RoleName.ADMIN);
+            
+            for (User pharmacist : pharmacists) {
+                Notification notification = new Notification();
+                notification.setUser(pharmacist);
+                notification.setTitle(title);
+                notification.setMessage(message);
+                notification.setNotificationType(Notification.NotificationType.EXPIRY_ALERT);
+                notification.setPriority(Notification.Priority.HIGH);
+                notification.setReferenceId(medicineId);
+                notification.setReferenceType(MEDICINE_REFERENCE_TYPE);
+                saveNotification(notification);
+            }
+            
+            for (User admin : admins) {
+                Notification notification = new Notification();
+                notification.setUser(admin);
+                notification.setTitle(title);
+                notification.setMessage(message);
+                notification.setNotificationType(Notification.NotificationType.EXPIRY_ALERT);
+                notification.setPriority(Notification.Priority.HIGH);
+                notification.setReferenceId(medicineId);
+                notification.setReferenceType(MEDICINE_REFERENCE_TYPE);
                 saveNotification(notification);
             }
         }

@@ -1129,6 +1129,83 @@ public class CustomerController {
                contentType.startsWith("image/");
     }
 
+    /**
+     * Get customer profile
+     */
+    @GetMapping("/customer-profile")
+    public ResponseEntity<User> getCustomerProfile() {
+        try {
+            Long customerId = getCurrentUserId();
+            logger.info("Profile requested by customer ID: {}", customerId);
+            
+            if (customerId == null) {
+                logger.warn("Unauthorized access attempt to profile");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            Optional<User> userOpt = userService.getUserById(customerId);
+            if (userOpt.isEmpty()) {
+                logger.warn("Customer not found with ID: {}", customerId);
+                return ResponseEntity.notFound().build();
+            }
+
+            User user = userOpt.get();
+            user.setPassword(null); // Remove password from response
+            
+            return ResponseEntity.ok(user);
+        } catch (Exception e) {
+            logger.error("Error getting customer profile: ", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Update customer profile
+     */
+    @PutMapping("/customer-profile")
+    public ResponseEntity<User> updateCustomerProfile(@RequestBody Map<String, Object> updateData) {
+        try {
+            Long customerId = getCurrentUserId();
+            logger.info("Profile update requested by customer ID: {}", customerId);
+            
+            if (customerId == null) {
+                logger.warn("Unauthorized access attempt to update profile");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            Optional<User> userOpt = userService.getUserById(customerId);
+            if (userOpt.isEmpty()) {
+                logger.warn("Customer not found with ID: {}", customerId);
+                return ResponseEntity.notFound().build();
+            }
+
+            User user = userOpt.get();
+            
+            // Update fields if provided
+            if (updateData.containsKey("firstName") && updateData.get("firstName") != null) {
+                user.setFirstName((String) updateData.get("firstName"));
+            }
+            if (updateData.containsKey("lastName") && updateData.get("lastName") != null) {
+                user.setLastName((String) updateData.get("lastName"));
+            }
+            if (updateData.containsKey("phone")) {
+                user.setPhone((String) updateData.get("phone"));
+            }
+            if (updateData.containsKey("address")) {
+                user.setAddress((String) updateData.get("address"));
+            }
+            
+            User updatedUser = userService.saveUser(user);
+            updatedUser.setPassword(null); // Remove password from response
+            
+            logger.info("Profile updated successfully for customer ID: {}", customerId);
+            return ResponseEntity.ok(updatedUser);
+        } catch (Exception e) {
+            logger.error("Error updating customer profile: ", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     private String getFileExtension(String filename) {
         if (filename == null || !filename.contains(".")) {
             return "";

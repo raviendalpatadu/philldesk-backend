@@ -194,4 +194,230 @@ public class PdfGenerationServiceImpl implements PdfGenerationService {
                 .setFontSize(10);
         document.add(footer);
     }
+
+    @Override
+    public byte[] generateReportPdf(String reportTitle, Object reportData, String dateRange) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PdfWriter writer = new PdfWriter(baos);
+        PdfDocument pdfDoc = new PdfDocument(writer);
+        Document document = new Document(pdfDoc);
+
+        // Add header
+        addReportHeader(document, reportTitle, dateRange);
+        
+        // Add report content based on data type
+        addReportContent(document, reportData);
+        
+        // Add footer
+        addReportFooter(document);
+
+        document.close();
+        return baos.toByteArray();
+    }
+
+    private void addReportHeader(Document document, String title, String dateRange) {
+        // Company header
+        Paragraph header = new Paragraph()
+                .add("PhillDesk Pharmacy Management System").add("\n")
+                .add("Administrative Reports")
+                .setFontSize(16)
+                .setBold()
+                .setMarginBottom(20);
+        document.add(header);
+
+        // Report title
+        Paragraph reportTitle = new Paragraph(title)
+                .setFontSize(14)
+                .setBold()
+                .setMarginBottom(10);
+        document.add(reportTitle);
+
+        // Date range
+        Paragraph dateInfo = new Paragraph()
+                .add("Report Period: " + dateRange).add("\n")
+                .add("Generated on: " + DATETIME_FORMAT.format(java.time.LocalDateTime.now()))
+                .setFontSize(10)
+                .setMarginBottom(20);
+        document.add(dateInfo);
+    }
+
+    private void addReportContent(Document document, Object reportData) {
+        if (reportData instanceof java.util.Map) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> data = (java.util.Map<String, Object>) reportData;
+            
+            // Summary statistics
+            if (data.containsKey("summaryStats")) {
+                addSummaryStats(document, (java.util.Map<String, Object>) data.get("summaryStats"));
+            }
+            
+            // Sales data
+            if (data.containsKey("salesData")) {
+                addSalesDataTable(document, (java.util.List<?>) data.get("salesData"));
+            }
+            
+            // Inventory data
+            if (data.containsKey("inventoryData")) {
+                addInventoryDataTable(document, (java.util.List<?>) data.get("inventoryData"));
+            }
+            
+            // User activity data
+            if (data.containsKey("userActivityData")) {
+                addUserActivityTable(document, (java.util.List<?>) data.get("userActivityData"));
+            }
+        }
+    }
+
+    private void addSummaryStats(Document document, java.util.Map<String, Object> summaryStats) {
+        Paragraph summaryTitle = new Paragraph("Summary Statistics")
+                .setFontSize(12)
+                .setBold()
+                .setMarginTop(20)
+                .setMarginBottom(10);
+        document.add(summaryTitle);
+
+        Table summaryTable = new Table(2);
+        summaryTable.setWidth(com.itextpdf.layout.properties.UnitValue.createPercentValue(100));
+
+        // Add summary statistics
+        if (summaryStats.containsKey("totalRevenue")) {
+            summaryTable.addCell(new Cell().add(new Paragraph("Total Revenue")));
+            summaryTable.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.format(summaryStats.get("totalRevenue")))));
+        }
+        if (summaryStats.containsKey("totalInvoices")) {
+            summaryTable.addCell(new Cell().add(new Paragraph("Total Orders")));
+            summaryTable.addCell(new Cell().add(new Paragraph(summaryStats.get("totalInvoices").toString())));
+        }
+        if (summaryStats.containsKey("averageOrderValue")) {
+            summaryTable.addCell(new Cell().add(new Paragraph("Average Order Value")));
+            summaryTable.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.format(summaryStats.get("averageOrderValue")))));
+        }
+        if (summaryStats.containsKey("activeUsers")) {
+            summaryTable.addCell(new Cell().add(new Paragraph("Active Users")));
+            summaryTable.addCell(new Cell().add(new Paragraph(summaryStats.get("activeUsers").toString())));
+        }
+
+        document.add(summaryTable);
+    }
+
+    private void addSalesDataTable(Document document, java.util.List<?> salesData) {
+        if (salesData == null || salesData.isEmpty()) return;
+
+        Paragraph salesTitle = new Paragraph("Sales Report")
+                .setFontSize(12)
+                .setBold()
+                .setMarginTop(20)
+                .setMarginBottom(10);
+        document.add(salesTitle);
+
+        Table salesTable = new Table(6);
+        salesTable.setWidth(com.itextpdf.layout.properties.UnitValue.createPercentValue(100));
+
+        // Headers
+        salesTable.addHeaderCell(new Cell().add(new Paragraph("Date")).setBold());
+        salesTable.addHeaderCell(new Cell().add(new Paragraph("Invoices")).setBold());
+        salesTable.addHeaderCell(new Cell().add(new Paragraph("Revenue")).setBold());
+        salesTable.addHeaderCell(new Cell().add(new Paragraph("Prescriptions")).setBold());
+        salesTable.addHeaderCell(new Cell().add(new Paragraph("OTC Sales")).setBold());
+        salesTable.addHeaderCell(new Cell().add(new Paragraph("Avg Order Value")).setBold());
+
+        // Data rows (simplified - you would need to properly cast and extract data)
+        for (Object row : salesData) {
+            if (row instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> data = (java.util.Map<String, Object>) row;
+                salesTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("date", "").toString())));
+                salesTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("invoices", "0").toString())));
+                salesTable.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.format(data.getOrDefault("revenue", 0)))));
+                salesTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("prescriptions", "0").toString())));
+                salesTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("otc", "0").toString())));
+                salesTable.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.format(data.getOrDefault("averageValue", 0)))));
+            }
+        }
+
+        document.add(salesTable);
+    }
+
+    private void addInventoryDataTable(Document document, java.util.List<?> inventoryData) {
+        if (inventoryData == null || inventoryData.isEmpty()) return;
+
+        Paragraph inventoryTitle = new Paragraph("Inventory Report")
+                .setFontSize(12)
+                .setBold()
+                .setMarginTop(20)
+                .setMarginBottom(10);
+        document.add(inventoryTitle);
+
+        Table inventoryTable = new Table(6);
+        inventoryTable.setWidth(com.itextpdf.layout.properties.UnitValue.createPercentValue(100));
+
+        // Headers
+        inventoryTable.addHeaderCell(new Cell().add(new Paragraph("Category")).setBold());
+        inventoryTable.addHeaderCell(new Cell().add(new Paragraph("Total Items")).setBold());
+        inventoryTable.addHeaderCell(new Cell().add(new Paragraph("Total Value")).setBold());
+        inventoryTable.addHeaderCell(new Cell().add(new Paragraph("Low Stock")).setBold());
+        inventoryTable.addHeaderCell(new Cell().add(new Paragraph("Expiring Soon")).setBold());
+        inventoryTable.addHeaderCell(new Cell().add(new Paragraph("Turnover Rate")).setBold());
+
+        // Data rows
+        for (Object row : inventoryData) {
+            if (row instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> data = (java.util.Map<String, Object>) row;
+                inventoryTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("category", "").toString())));
+                inventoryTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("totalItems", "0").toString())));
+                inventoryTable.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.format(data.getOrDefault("totalValue", 0)))));
+                inventoryTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("lowStock", "0").toString())));
+                inventoryTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("expiringSoon", "0").toString())));
+                inventoryTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("turnoverRate", "0").toString() + "%")));
+            }
+        }
+
+        document.add(inventoryTable);
+    }
+
+    private void addUserActivityTable(Document document, java.util.List<?> userActivityData) {
+        if (userActivityData == null || userActivityData.isEmpty()) return;
+
+        Paragraph activityTitle = new Paragraph("User Activity Report")
+                .setFontSize(12)
+                .setBold()
+                .setMarginTop(20)
+                .setMarginBottom(10);
+        document.add(activityTitle);
+
+        Table activityTable = new Table(5);
+        activityTable.setWidth(com.itextpdf.layout.properties.UnitValue.createPercentValue(100));
+
+        // Headers
+        activityTable.addHeaderCell(new Cell().add(new Paragraph("Role")).setBold());
+        activityTable.addHeaderCell(new Cell().add(new Paragraph("Active Users")).setBold());
+        activityTable.addHeaderCell(new Cell().add(new Paragraph("Avg Session Time")).setBold());
+        activityTable.addHeaderCell(new Cell().add(new Paragraph("Prescriptions")).setBold());
+        activityTable.addHeaderCell(new Cell().add(new Paragraph("Efficiency")).setBold());
+
+        // Data rows
+        for (Object row : userActivityData) {
+            if (row instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> data = (java.util.Map<String, Object>) row;
+                activityTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("role", "").toString())));
+                activityTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("activeUsers", "0") + " / " + data.getOrDefault("totalUsers", "0"))));
+                activityTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("avgSessionTime", "").toString())));
+                activityTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("prescriptionsProcessed", "0").toString())));
+                activityTable.addCell(new Cell().add(new Paragraph(data.getOrDefault("efficiency", "0").toString() + "%")));
+            }
+        }
+
+        document.add(activityTable);
+    }
+
+    private void addReportFooter(Document document) {
+        Paragraph footer = new Paragraph()
+                .add("This report was generated by PhillDesk Pharmacy Management System").add("\n")
+                .add("For questions about this report, contact the system administrator")
+                .setFontSize(8)
+                .setMarginTop(30);
+        document.add(footer);
+    }
 }
