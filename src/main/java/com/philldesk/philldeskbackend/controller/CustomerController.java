@@ -1,20 +1,19 @@
 package com.philldesk.philldeskbackend.controller;
 
-import com.philldesk.philldeskbackend.entity.Prescription;
-import com.philldesk.philldeskbackend.entity.Bill;
-import com.philldesk.philldeskbackend.entity.User;
+import com.philldesk.philldeskbackend.entity.*;
 import com.philldesk.philldeskbackend.dto.PrescriptionResponseDTO;
 import com.philldesk.philldeskbackend.dto.BillResponseDTO;
 import com.philldesk.philldeskbackend.dto.UserResponseDTO;
+import com.philldesk.philldeskbackend.dto.ShippingDetailsDTO;
 import com.philldesk.philldeskbackend.security.UserPrincipal;
-import com.philldesk.philldeskbackend.service.PrescriptionService;
-import com.philldesk.philldeskbackend.service.BillService;
-import com.philldesk.philldeskbackend.service.UserService;
-import com.philldesk.philldeskbackend.service.GoogleDriveService;
+import com.philldesk.philldeskbackend.service.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,16 +42,25 @@ public class CustomerController {
     private final BillService billService;
     private final UserService userService;
     private final GoogleDriveService googleDriveService;
+    private final ShippingDetailsService shippingDetailsService;
+    private final MedicineService medicineService;
+    private final PdfGenerationService pdfService;
 
     @Autowired
     public CustomerController(PrescriptionService prescriptionService, 
                              BillService billService,
                              UserService userService,
-                             GoogleDriveService googleDriveService) {
+                             GoogleDriveService googleDriveService,
+                             ShippingDetailsService shippingDetailsService,
+                              MedicineService medicineService,
+                              PdfGenerationService pdfService) {
         this.prescriptionService = prescriptionService;
         this.billService = billService;
         this.userService = userService;
         this.googleDriveService = googleDriveService;
+        this.shippingDetailsService = shippingDetailsService;
+        this.medicineService = medicineService;
+        this.pdfService = pdfService;
     }
 
     /**
@@ -510,6 +519,52 @@ public class CustomerController {
     }
 
     /**
+     * Check for recent bill notifications (bills generated in last 24 hours)
+     */
+    @GetMapping("/bills/recent-notifications")
+    public ResponseEntity<Map<String, Object>> getRecentBillNotifications() {
+        try {
+            Long customerId = getCurrentUserId();
+            if (customerId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            List<Bill> allBills = billService.getBillsByCustomerId(customerId);
+            LocalDateTime yesterday = LocalDateTime.now().minusHours(24);
+            
+            // Filter bills created in the last 24 hours
+            List<Bill> recentBills = allBills.stream()
+                .filter(bill -> bill.getCreatedAt().isAfter(yesterday))
+                .filter(bill -> bill.getPaymentStatus() == Bill.PaymentStatus.PENDING)
+                .collect(Collectors.toList());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("hasNewBills", !recentBills.isEmpty());
+            response.put("newBillsCount", recentBills.size());
+            
+            if (!recentBills.isEmpty()) {
+                List<Map<String, Object>> billNotifications = recentBills.stream()
+                    .map(bill -> {
+                        Map<String, Object> billInfo = new HashMap<>();
+                        billInfo.put("billId", bill.getId());
+                        billInfo.put("billNumber", bill.getBillNumber());
+                        billInfo.put("prescriptionNumber", bill.getPrescription().getPrescriptionNumber());
+                        billInfo.put("amount", bill.getTotalAmount());
+                        billInfo.put("createdAt", bill.getCreatedAt());
+                        return billInfo;
+                    })
+                    .collect(Collectors.toList());
+                response.put("newBills", billNotifications);
+            }
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error retrieving recent bill notifications for customer {}: {}", getCurrentUserId(), e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
      * Update payment type for a bill (online or pay on pickup)
      */
     @PutMapping("/bills/{id}/payment-type")
@@ -564,6 +619,164 @@ public class CustomerController {
     }
 
     /**
+     * Get customer's order history (combines prescriptions and bills for order tracking)
+     */
+    @GetMapping("/orders")
+    public ResponseEntity<List<Map<String, Object>>> getOrderHistory() {
+        try {
+            Long customerId = getCurrentUserId();
+            if (customerId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            // Get all prescriptions for the customer
+            List<Prescription> prescriptions = prescriptionService.getPrescriptionsByCustomerId(customerId);
+            
+            List<Map<String, Object>> orders = prescriptions.stream()
+                .map(prescription -> {
+                    Map<String, Object> order = new HashMap<>();
+                    
+                    // Basic order information
+                    order.put("orderId", "ORD-" + prescription.getId());
+                    order.put("prescriptionId", prescription.getPrescriptionNumber());
+                    order.put("doctorName", prescription.getDoctorName());
+                    order.put("date", prescription.getPrescriptionDate().toLocalDate().toString());
+                    
+                    // Order status mapping
+                    String orderStatus = mapPrescriptionStatusToOrderStatus(prescription.getStatus());
+                    order.put("status", orderStatus);
+                    
+                    // Get bill information if available
+                    Optional<Bill> billOpt = billService.getBillByPrescription(prescription);
+                    if (billOpt.isPresent()) {
+                        Bill bill = billOpt.get();
+                        order.put("billId", bill.getId());
+                        order.put("billNumber", bill.getBillNumber());
+                        order.put("total", bill.getSubtotal());
+                        order.put("shippingCost", bill.getShippingDetails() != null ? 
+                            (bill.getShippingDetails().getDeliveryFee() != null ? bill.getShippingDetails().getDeliveryFee() : 0.00) : 0.00);
+                        order.put("discount", bill.getDiscount());
+                        order.put("tax", bill.getTax());
+                        order.put("netTotal", bill.getTotalAmount());
+                        order.put("paymentMethod", bill.getPaymentMethod() != null ? bill.getPaymentMethod().toString() : null);
+                        order.put("paymentStatus", bill.getPaymentStatus().toString());
+                        
+                        // Shipping and tracking information
+                        if (bill.getShippingDetails() != null) {
+                            ShippingDetails shipping = bill.getShippingDetails();
+                            order.put("trackingNumber", shipping.getTrackingNumber());
+                            order.put("shippingAddress", buildShippingAddress(shipping));
+                            order.put("estimatedDelivery", shipping.getEstimatedDeliveryDate());
+                            order.put("actualDelivery", shipping.getDeliveredAt());
+                            order.put("courier", "PhillDesk Delivery"); // Default courier name
+                            order.put("shippingStatus", shipping.getShippingStatus().toString());
+                        }
+                    } else {
+                        // No bill yet, set defaults
+                        order.put("total", 0.00);
+                        order.put("shippingCost", 0.00);
+                        order.put("discount", 0.00);
+                        order.put("tax", 0.00);
+                        order.put("netTotal", 0.00);
+                    }
+                    
+                    // Get prescription items
+                    List<Map<String, Object>> items = new ArrayList<>();
+                    if (prescription.getPrescriptionItems() != null) {
+                        items = prescription.getPrescriptionItems().stream()
+                            .map(item -> {
+                                Map<String, Object> itemMap = new HashMap<>();
+                                itemMap.put("name", item.getMedicine().getName());
+                                itemMap.put("quantity", item.getQuantity());
+                                itemMap.put("price", item.getUnitPrice());
+                                itemMap.put("manufacturer", item.getMedicine().getManufacturer());
+                                itemMap.put("instructions", item.getInstructions());
+                                itemMap.put("dosage", item.getDosage());
+                                itemMap.put("frequency", item.getFrequency());
+                                return itemMap;
+                            })
+                            .collect(Collectors.toList());
+                    }
+                    order.put("items", items);
+                    
+                    // Additional order properties
+                    order.put("canReorder", prescription.getStatus() == Prescription.PrescriptionStatus.COMPLETED);
+                    order.put("orderNotes", prescription.getNotes());
+                    
+                    return order;
+                })
+                .sorted((a, b) -> {
+                    // Sort by date descending (most recent first)
+                    String dateA = (String) a.get("date");
+                    String dateB = (String) b.get("date");
+                    return dateB.compareTo(dateA);
+                })
+                .collect(Collectors.toList());
+
+            return ResponseEntity.ok(orders);
+        } catch (Exception e) {
+            logger.error("Error retrieving order history for customer {}: {}", getCurrentUserId(), e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Get detailed tracking information for a specific order
+     */
+    @GetMapping("/orders/{orderId}/tracking")
+    public ResponseEntity<Map<String, Object>> getOrderTracking(@PathVariable String orderId) {
+        try {
+            Long customerId = getCurrentUserId();
+            if (customerId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            // Extract prescription ID from order ID
+            Long prescriptionId = Long.parseLong(orderId.replace("ORD-", ""));
+            
+            Optional<Prescription> prescriptionOpt = prescriptionService.findById(prescriptionId);
+            if (prescriptionOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Prescription prescription = prescriptionOpt.get();
+            
+            // Verify the prescription belongs to the current user
+            if (!prescription.getCustomer().getId().equals(customerId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
+            Map<String, Object> trackingInfo = new HashMap<>();
+            trackingInfo.put("orderId", orderId);
+            trackingInfo.put("prescriptionNumber", prescription.getPrescriptionNumber());
+            
+            // Get bill and shipping details
+            Optional<Bill> billOpt = billService.getBillByPrescription(prescription);
+            if (billOpt.isPresent() && billOpt.get().getShippingDetails() != null) {
+                ShippingDetails shipping = billOpt.get().getShippingDetails();
+                trackingInfo.put("trackingNumber", shipping.getTrackingNumber());
+                trackingInfo.put("courier", "PhillDesk Delivery");
+                trackingInfo.put("shippingStatus", shipping.getShippingStatus().toString());
+                trackingInfo.put("estimatedDelivery", shipping.getEstimatedDeliveryDate());
+                trackingInfo.put("actualDelivery", shipping.getDeliveredAt());
+                
+                // Build tracking timeline
+                List<Map<String, Object>> timeline = buildTrackingTimeline(prescription, shipping);
+                trackingInfo.put("timeline", timeline);
+            } else {
+                trackingInfo.put("trackingNumber", null);
+                trackingInfo.put("courier", null);
+                trackingInfo.put("message", "Tracking information not available yet");
+            }
+
+            return ResponseEntity.ok(trackingInfo);
+        } catch (Exception e) {
+            logger.error("Error retrieving tracking information for order {}: {}", orderId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
      * Process online payment for a bill
      */
     @PostMapping("/bills/{id}/pay-online")
@@ -607,14 +820,57 @@ public class CustomerController {
             String cvv = (String) paymentData.get("cvv");
             String expiryDate = (String) paymentData.get("expiryDate");
 
+            // Extract shipping details
+            Map<String, Object> shippingData = (Map<String, Object>) paymentData.get("shippingDetails");
+            
             // Simulate payment processing
             boolean paymentSuccessful = processOnlinePayment(paymentMethod, cardNumber, cvv, expiryDate, bill.getTotalAmount());
 
             if (paymentSuccessful) {
+                // reduce the stock
+                prescriptionService.getPrescriptionById(bill.getPrescription().getId()).ifPresent(prescription -> {
+                    prescription.getPrescriptionItems().forEach(item -> {
+                        Medicine medicine = medicineService.getMedicineById(item.getMedicine().getId())
+                                .orElseThrow(() -> new IllegalStateException("Medicine not found: " + item.getMedicine().getId()));
+                        if (medicine.getQuantity() < item.getQuantity()) {
+                            throw new IllegalStateException("Insufficient stock for medicine: " + medicine.getName());
+                        }
+                        medicineService.reduceStock(medicine.getId(), item.getQuantity());
+                    });
+                });
+                // Update prescription status to READY_FOR_PICKUP instead of DISPENSED
+                prescriptionService.updateStatus(bill.getPrescription().getId(), Prescription.PrescriptionStatus.COMPLETED);
+
                 bill.setPaymentStatus(Bill.PaymentStatus.PAID);
                 bill.setPaymentMethod(Bill.PaymentMethod.ONLINE);
                 bill.setPaidAt(LocalDateTime.now());
                 billService.updateBill(bill);
+
+                // Create shipping details if provided
+                ShippingDetails shippingDetails = null;
+                if (shippingData != null) {
+                    try {
+                        ShippingDetailsDTO shippingDTO = new ShippingDetailsDTO();
+                        shippingDTO.setRecipientName((String) shippingData.get("recipientName"));
+                        shippingDTO.setContactPhone((String) shippingData.get("contactPhone"));
+                        shippingDTO.setAlternatePhone((String) shippingData.get("alternatePhone"));
+                        shippingDTO.setEmail((String) shippingData.get("email"));
+                        shippingDTO.setAddressLine1((String) shippingData.get("addressLine1"));
+                        shippingDTO.setAddressLine2((String) shippingData.get("addressLine2"));
+                        shippingDTO.setCity((String) shippingData.get("city"));
+                        shippingDTO.setStateProvince((String) shippingData.get("stateProvince"));
+                        shippingDTO.setPostalCode((String) shippingData.get("postalCode"));
+                        shippingDTO.setCountry((String) shippingData.get("country"));
+                        shippingDTO.setDeliveryInstructions((String) shippingData.get("deliveryInstructions"));
+                        shippingDTO.setPreferredDeliveryTime((String) shippingData.get("preferredDeliveryTime"));
+                        
+                        shippingDetails = shippingDetailsService.createShippingDetails(bill.getId(), shippingDTO);
+                        logger.info("Created shipping details for bill {}: {}", bill.getId(), shippingDetails.getTrackingNumber());
+                    } catch (Exception e) {
+                        logger.error("Error creating shipping details for bill {}: {}", bill.getId(), e.getMessage(), e);
+                        // Continue with payment success even if shipping details creation fails
+                    }
+                }
 
                 Map<String, Object> response = new HashMap<>();
                 response.put(MESSAGE_KEY, "Payment processed successfully");
@@ -622,6 +878,12 @@ public class CustomerController {
                 response.put("amount", bill.getTotalAmount());
                 response.put("paymentStatus", "PAID");
                 response.put("transactionId", "TXN" + System.currentTimeMillis());
+                
+                if (shippingDetails != null) {
+                    response.put("trackingNumber", shippingDetails.getTrackingNumber());
+                    response.put("deliveryMessage", "Your medicines will be delivered to the specified address. Track your order with tracking number: " + shippingDetails.getTrackingNumber());
+                }
+                
                 return ResponseEntity.ok(response);
             } else {
                 Map<String, String> errorResponse = new HashMap<>();
@@ -676,6 +938,50 @@ public class CustomerController {
         }
     }
 
+    /**
+     * Download bill as PDF
+     * GET /api/customer/bills/{billId}/download
+     */
+    @GetMapping("/bills/{billId}/download")
+    public ResponseEntity<byte[]> downloadBill(@PathVariable Long billId) {
+        try {
+            Long customerId = getCurrentUserId();
+            if (customerId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            Optional<Bill> billOptional = billService.getBillById(billId);
+            if (billOptional.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Bill bill = billOptional.get();
+            
+            // Check if bill belongs to current customer
+            if (!bill.getCustomer().getId().equals(customerId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
+            byte[] pdfBytes = pdfService.generateBillPdf(bill);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDisposition(
+                ContentDisposition.attachment()
+                    .filename("bill-" + bill.getBillNumber() + ".pdf")
+                    .build()
+            );
+            
+            return ResponseEntity.ok()
+                .headers(headers)
+                .body(pdfBytes);
+            
+        } catch (Exception e) {
+            logger.error("Error downloading bill PDF: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     // Private helper method to simulate online payment processing
     private boolean processOnlinePayment(String paymentMethod, String cardNumber, String cvv, String expiryDate, BigDecimal amount) {
         // In a real system, this would integrate with payment gateways like Stripe, PayPal, etc.
@@ -695,6 +1001,112 @@ public class CustomerController {
         
         // Simulate 95% success rate
         return Math.random() > 0.05;
+    }
+
+    /**
+     * Helper method to map prescription status to order status
+     */
+    private String mapPrescriptionStatusToOrderStatus(Prescription.PrescriptionStatus status) {
+        return switch (status) {
+            case PENDING -> "Processing";
+            case APPROVED -> "Confirmed";
+            case READY_FOR_PICKUP -> "Shipped";
+            case DISPENSED -> "In Transit";
+            case COMPLETED -> "Delivered";
+            case REJECTED -> "Cancelled";
+        };
+    }
+
+    /**
+     * Helper method to build shipping address string
+     */
+    private String buildShippingAddress(ShippingDetails shipping) {
+        StringBuilder address = new StringBuilder();
+        address.append(shipping.getAddressLine1());
+        if (shipping.getAddressLine2() != null && !shipping.getAddressLine2().isEmpty()) {
+            address.append(", ").append(shipping.getAddressLine2());
+        }
+        address.append(", ").append(shipping.getCity());
+        address.append(", ").append(shipping.getStateProvince());
+        address.append(" ").append(shipping.getPostalCode());
+        if (shipping.getCountry() != null && !shipping.getCountry().isEmpty()) {
+            address.append(", ").append(shipping.getCountry());
+        }
+        return address.toString();
+    }
+
+    /**
+     * Helper method to build tracking timeline
+     */
+    private List<Map<String, Object>> buildTrackingTimeline(Prescription prescription, ShippingDetails shipping) {
+        List<Map<String, Object>> timeline = new ArrayList<>();
+        
+        // Order placed
+        Map<String, Object> orderPlaced = new HashMap<>();
+        orderPlaced.put("status", "Order Placed");
+        orderPlaced.put("description", "Prescription uploaded and order placed");
+        orderPlaced.put("timestamp", prescription.getPrescriptionDate());
+        orderPlaced.put("completed", true);
+        timeline.add(orderPlaced);
+        
+        // Order confirmed
+        if (prescription.getApprovedAt() != null) {
+            Map<String, Object> confirmed = new HashMap<>();
+            confirmed.put("status", "Order Confirmed");
+            confirmed.put("description", "Prescription approved and bill generated");
+            confirmed.put("timestamp", prescription.getApprovedAt());
+            confirmed.put("completed", true);
+            timeline.add(confirmed);
+        }
+        
+        // Processing
+        if (shipping.getProcessedAt() != null) {
+            Map<String, Object> processing = new HashMap<>();
+            processing.put("status", "Processing");
+            processing.put("description", "Order is being prepared for shipment");
+            processing.put("timestamp", shipping.getProcessedAt());
+            processing.put("completed", true);
+            timeline.add(processing);
+        }
+        
+        // Shipped
+        if (shipping.getShippedAt() != null) {
+            Map<String, Object> shipped = new HashMap<>();
+            shipped.put("status", "Shipped");
+            shipped.put("description", "Package has been dispatched for delivery");
+            shipped.put("timestamp", shipping.getShippedAt());
+            shipped.put("completed", true);
+            timeline.add(shipped);
+        }
+        
+        // In Transit
+        if (shipping.getShippingStatus() == ShippingDetails.ShippingStatus.IN_TRANSIT) {
+            Map<String, Object> inTransit = new HashMap<>();
+            inTransit.put("status", "In Transit");
+            inTransit.put("description", "Package is on the way to destination");
+            inTransit.put("timestamp", null);
+            inTransit.put("completed", true);
+            timeline.add(inTransit);
+        }
+        
+        // Delivered
+        if (shipping.getDeliveredAt() != null) {
+            Map<String, Object> delivered = new HashMap<>();
+            delivered.put("status", "Delivered");
+            delivered.put("description", "Package has been successfully delivered");
+            delivered.put("timestamp", shipping.getDeliveredAt());
+            delivered.put("completed", true);
+            timeline.add(delivered);
+        } else if (prescription.getStatus() == Prescription.PrescriptionStatus.COMPLETED) {
+            Map<String, Object> completed = new HashMap<>();
+            completed.put("status", "Completed");
+            completed.put("description", "Order has been completed and prescription dispensed");
+            completed.put("timestamp", prescription.getUpdatedAt());
+            completed.put("completed", true);
+            timeline.add(completed);
+        }
+        
+        return timeline;
     }
 
     // Helper methods

@@ -165,4 +165,18 @@ public class MedicineServiceImpl implements MedicineService {
         Optional<Medicine> medicine = medicineRepository.findByNameAndIsActiveTrue(name);
         return medicine.isPresent();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByNameStrengthAndForm(String name, String strength, String dosageForm) {
+        Optional<Medicine> medicine = medicineRepository.findByNameAndStrengthAndDosageForm(name, strength, dosageForm);
+        return medicine.isPresent();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByNameStrengthFormAndManufacturer(String name, String strength, String dosageForm, String manufacturer) {
+        Optional<Medicine> medicine = medicineRepository.findByNameAndStrengthAndDosageFormAndManufacturer(name, strength, dosageForm, manufacturer);
+        return medicine.isPresent();
+    }
 }

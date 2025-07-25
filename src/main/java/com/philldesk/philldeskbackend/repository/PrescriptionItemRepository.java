@@ -4,6 +4,7 @@ import com.philldesk.philldeskbackend.entity.PrescriptionItem;
 import com.philldesk.philldeskbackend.entity.Prescription;
 import com.philldesk.philldeskbackend.entity.Medicine;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,4 +33,8 @@ public interface PrescriptionItemRepository extends JpaRepository<PrescriptionIt
     
     @Query("SELECT SUM(pi.totalPrice) FROM PrescriptionItem pi WHERE pi.prescription.id = :prescriptionId")
     Double calculateTotalAmountByPrescription(@Param("prescriptionId") Long prescriptionId);
+    
+    @Modifying
+    @Query("DELETE FROM PrescriptionItem pi WHERE pi.prescription.id = :prescriptionId")
+    void deleteByPrescriptionId(@Param("prescriptionId") Long prescriptionId);
 }

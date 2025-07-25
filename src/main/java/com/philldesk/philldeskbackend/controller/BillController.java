@@ -165,16 +165,31 @@ public class BillController {
 
     @PostMapping("/generate/{prescriptionId}")
     public ResponseEntity<BillResponseDTO> generateBillFromPrescription(@PathVariable Long prescriptionId) {
-        Optional<Prescription> prescription = prescriptionService.getPrescriptionById(prescriptionId);
-        if (prescription.isPresent()) {
-            try {
-                Bill generatedBill = billService.generateBillFromPrescription(prescription.get());
-                return ResponseEntity.status(HttpStatus.CREATED).body(BillResponseDTO.fromEntity(generatedBill));
-            } catch (Exception e) {
-                return ResponseEntity.badRequest().build();
+        try {
+            Optional<Prescription> prescription = prescriptionService.getPrescriptionById(prescriptionId);
+            if (prescription.isEmpty()) {
+                return ResponseEntity.notFound().build();
             }
+            
+            // Check if bill already exists
+            Optional<Bill> existingBill = billService.getBillByPrescription(prescription.get());
+            if (existingBill.isPresent()) {
+                return ResponseEntity.status(HttpStatus.OK)
+                        .body(BillResponseDTO.fromEntity(existingBill.get()));
+            }
+            
+            // Generate new bill
+            Bill generatedBill = billService.generateBillFromPrescription(prescription.get());
+            return ResponseEntity.status(HttpStatus.CREATED).body(BillResponseDTO.fromEntity(generatedBill));
+            
+        } catch (IllegalArgumentException e) {
+            // Return bad request with error message for validation errors
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            // Log the error and return internal server error
+            System.err.println("Error generating bill for prescription " + prescriptionId + ": " + e.getMessage());
+            return ResponseEntity.internalServerError().build();
         }
-        return ResponseEntity.notFound().build();
     }
 
     @PutMapping("/{id}")
@@ -244,5 +259,66 @@ public class BillController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         Long count = billService.getTotalBillCount(startDate, endDate);
         return ResponseEntity.ok(count);
+    }
+
+    /**
+     * Generate and download invoice PDF
+     */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> generateInvoicePDF(@PathVariable Long id) {
+        try {
+            Optional<Bill> bill = billService.getBillById(id);
+            if (bill.isPresent()) {
+                byte[] pdfData = billService.generateInvoicePDF(bill.get());
+                return ResponseEntity.ok()
+                        .header("Content-Type", "application/pdf")
+                        .header("Content-Disposition", "attachment; filename=invoice-" + bill.get().getBillNumber() + ".pdf")
+                        .body(pdfData);
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Print invoice (generate PDF for printing)
+     */
+    @PostMapping("/{id}/print")
+    public ResponseEntity<byte[]> printInvoice(@PathVariable Long id) {
+        try {
+            Optional<Bill> bill = billService.getBillById(id);
+            if (bill.isPresent()) {
+                byte[] pdfData = billService.generateInvoicePDF(bill.get());
+                return ResponseEntity.ok()
+                        .header("Content-Type", "application/pdf")
+                        .header("Content-Disposition", "inline; filename=invoice-" + bill.get().getBillNumber() + ".pdf")
+                        .body(pdfData);
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Email invoice to customer
+     */
+    @PostMapping("/{id}/email")
+    public ResponseEntity<String> emailInvoice(@PathVariable Long id, @RequestParam(required = false) String emailAddress) {
+        try {
+            Optional<Bill> bill = billService.getBillById(id);
+            if (bill.isPresent()) {
+                boolean sent = billService.emailInvoice(bill.get(), emailAddress);
+                if (sent) {
+                    return ResponseEntity.ok("Invoice emailed successfully");
+                } else {
+                    return ResponseEntity.internalServerError().body("Failed to send email");
+                }
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Error sending email: " + e.getMessage());
+        }
     }
 }

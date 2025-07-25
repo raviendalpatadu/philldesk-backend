@@ -103,6 +103,22 @@
 			<artifactId>google-api-services-drive</artifactId>
 			<version>v3-rev197-1.25.0</version>
 		</dependency>
+		<!-- iText PDF Generation -->
+		<dependency>
+			<groupId>com.itextpdf</groupId>
+			<artifactId>kernel</artifactId>
+			<version>7.2.5</version>
+		</dependency>
+		<dependency>
+			<groupId>com.itextpdf</groupId>
+			<artifactId>layout</artifactId>
+			<version>7.2.5</version>
+		</dependency>
+		<dependency>
+			<groupId>com.itextpdf</groupId>
+			<artifactId>io</artifactId>
+			<version>7.2.5</version>
+		</dependency>
     </dependencies>
 
     <build>

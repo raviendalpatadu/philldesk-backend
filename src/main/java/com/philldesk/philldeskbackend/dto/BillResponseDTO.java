@@ -28,6 +28,7 @@ public class BillResponseDTO {
     private LocalDateTime updatedAt;
     private LocalDateTime paidAt;
     private List<BillItemResponseDTO> billItems;
+    private ShippingDetailsDTO shippingDetails;
 
     public static BillResponseDTO fromEntity(Bill bill) {
         return fromEntity(bill, true);
@@ -73,6 +74,11 @@ public class BillResponseDTO {
                 .toList());
         }
         
+        // Include shipping details if they exist
+        if (bill.getShippingDetails() != null) {
+            dto.setShippingDetails(ShippingDetailsDTO.fromEntity(bill.getShippingDetails()));
+        }
+        
         return dto;
     }
 
@@ -111,6 +117,60 @@ public class BillResponseDTO {
             dto.setManufacturer(billItem.getMedicine().getManufacturer());
             dto.setStrength(billItem.getMedicine().getStrength());
 
+            return dto;
+        }
+    }
+
+    @Data
+    public static class ShippingDetailsDTO {
+        private Long id;
+        private String addressLine1;
+        private String addressLine2;
+        private String city;
+        private String stateProvince;
+        private String postalCode;
+        private String country;
+        private String recipientName;
+        private String contactPhone;
+        private String shippingStatus;
+        private String trackingNumber;
+        private String trackingUrl;
+        private LocalDateTime estimatedDeliveryDate;
+        private String deliveryNotes;
+        private LocalDateTime orderedAt;
+        private LocalDateTime processedAt;
+        private LocalDateTime shippedAt;
+        private LocalDateTime deliveredAt;
+        private LocalDateTime cancelledAt;
+        private String cancellationReason;
+
+        public static ShippingDetailsDTO fromEntity(com.philldesk.philldeskbackend.entity.ShippingDetails shipping) {
+            if (shipping == null) {
+                return null;
+            }
+            
+            ShippingDetailsDTO dto = new ShippingDetailsDTO();
+            dto.setId(shipping.getId());
+            dto.setAddressLine1(shipping.getAddressLine1());
+            dto.setAddressLine2(shipping.getAddressLine2());
+            dto.setCity(shipping.getCity());
+            dto.setStateProvince(shipping.getStateProvince());
+            dto.setPostalCode(shipping.getPostalCode());
+            dto.setCountry(shipping.getCountry());
+            dto.setRecipientName(shipping.getRecipientName());
+            dto.setContactPhone(shipping.getContactPhone());
+            dto.setShippingStatus(shipping.getShippingStatus() != null ? shipping.getShippingStatus().toString() : null);
+            dto.setTrackingNumber(shipping.getTrackingNumber());
+            dto.setTrackingUrl(shipping.getTrackingUrl());
+            dto.setEstimatedDeliveryDate(shipping.getEstimatedDeliveryDate());
+            dto.setDeliveryNotes(shipping.getDeliveryNotes());
+            dto.setOrderedAt(shipping.getOrderedAt());
+            dto.setProcessedAt(shipping.getProcessedAt());
+            dto.setShippedAt(shipping.getShippedAt());
+            dto.setDeliveredAt(shipping.getDeliveredAt());
+            dto.setCancelledAt(shipping.getCancelledAt());
+            dto.setCancellationReason(shipping.getCancellationReason());
+            
             return dto;
         }
     }

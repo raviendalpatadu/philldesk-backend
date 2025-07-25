@@ -51,6 +51,10 @@ public class Bill {
     @JsonManagedReference
     private Set<BillItem> billItems;
     
+    @OneToOne(mappedBy = "bill", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JsonManagedReference
+    private ShippingDetails shippingDetails;
+    
     @Column(name = "subtotal", nullable = false, precision = 10, scale = 2)
     private BigDecimal subtotal = BigDecimal.ZERO;
     
@@ -113,10 +117,17 @@ public class Bill {
     @PrePersist
     @PreUpdate
     private void calculateTotalAmount() {
+        BigDecimal sub = subtotal != null ? subtotal : BigDecimal.ZERO;
         BigDecimal discountAmount = discount != null ? discount : BigDecimal.ZERO;
         BigDecimal taxAmount = tax != null ? tax : BigDecimal.ZERO;
-        BigDecimal sub = subtotal != null ? subtotal : BigDecimal.ZERO;
         
-        totalAmount = sub.subtract(discountAmount).add(taxAmount);
+        // Apply discount first, then add tax
+        BigDecimal discountedAmount = sub.subtract(discountAmount);
+        // Ensure discounted amount is not negative
+        if (discountedAmount.compareTo(BigDecimal.ZERO) < 0) {
+            discountedAmount = BigDecimal.ZERO;
+        }
+        
+        totalAmount = discountedAmount.add(taxAmount);
     }
 }

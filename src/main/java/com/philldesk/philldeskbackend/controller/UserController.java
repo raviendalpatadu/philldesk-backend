@@ -2,7 +2,9 @@ package com.philldesk.philldeskbackend.controller;
 
 import com.philldesk.philldeskbackend.entity.User;
 import com.philldesk.philldeskbackend.entity.Role;
+import com.philldesk.philldeskbackend.dto.UserUpdateDTO;
 import com.philldesk.philldeskbackend.service.UserService;
+import com.philldesk.philldeskbackend.service.RoleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,10 +23,12 @@ import java.util.Optional;
 public class UserController {
 
     private final UserService userService;
+    private final RoleService roleService;
 
     @Autowired
-    public UserController(UserService userService) {
+    public UserController(UserService userService, RoleService roleService) {
         this.userService = userService;
+        this.roleService = roleService;
     }
 
     @GetMapping
@@ -98,11 +102,50 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User user) {
-        Optional<User> existingUser = userService.getUserById(id);
-        if (existingUser.isPresent()) {
-            user.setId(id);
-            User updatedUser = userService.updateUser(user);
+    public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody UserUpdateDTO userUpdateDTO) {
+        Optional<User> existingUserOpt = userService.getUserById(id);
+        if (existingUserOpt.isPresent()) {
+            User existingUser = existingUserOpt.get();
+            
+            // Update basic fields
+            if (userUpdateDTO.getUsername() != null) {
+                existingUser.setUsername(userUpdateDTO.getUsername());
+            }
+            if (userUpdateDTO.getEmail() != null) {
+                existingUser.setEmail(userUpdateDTO.getEmail());
+            }
+            if (userUpdateDTO.getFirstName() != null) {
+                existingUser.setFirstName(userUpdateDTO.getFirstName());
+            }
+            if (userUpdateDTO.getLastName() != null) {
+                existingUser.setLastName(userUpdateDTO.getLastName());
+            }
+            if (userUpdateDTO.getPhone() != null) {
+                existingUser.setPhone(userUpdateDTO.getPhone());
+            }
+            if (userUpdateDTO.getAddress() != null) {
+                existingUser.setAddress(userUpdateDTO.getAddress());
+            }
+            if (userUpdateDTO.getIsActive() != null) {
+                existingUser.setIsActive(userUpdateDTO.getIsActive());
+            }
+            
+            // Handle role update
+            if (userUpdateDTO.getRoleId() != null) {
+                Optional<Role> roleOpt = roleService.getRoleById(userUpdateDTO.getRoleId());
+                if (roleOpt.isPresent()) {
+                    existingUser.setRole(roleOpt.get());
+                } else {
+                    return ResponseEntity.badRequest().build(); // Invalid role ID
+                }
+            }
+            
+            // Handle password update (optional)
+            if (userUpdateDTO.getPassword() != null && !userUpdateDTO.getPassword().trim().isEmpty()) {
+                existingUser.setPassword(userUpdateDTO.getPassword());
+            }
+            
+            User updatedUser = userService.updateUser(existingUser);
             return ResponseEntity.ok(updatedUser);
         }
         return ResponseEntity.notFound().build();

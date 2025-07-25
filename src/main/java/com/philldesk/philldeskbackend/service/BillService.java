@@ -34,4 +34,15 @@ public interface BillService {
     List<Bill> searchBills(String searchTerm);
     BigDecimal getTotalRevenue(LocalDate startDate, LocalDate endDate);
     Long getTotalBillCount(LocalDate startDate, LocalDate endDate);
+    
+    // Invoice generation and distribution methods
+    byte[] generateInvoicePDF(Bill bill);
+    boolean emailInvoice(Bill bill, String emailAddress);
+    
+    // Delivery and shipping methods
+    List<Bill> getOnlinePaidBillsByPharmacistWithShipping(Long pharmacistId);
+    
+    // Validation and calculation methods
+    boolean validateBillCalculations(Bill bill);
+    void recalculateBillTotals(Bill bill);
 }

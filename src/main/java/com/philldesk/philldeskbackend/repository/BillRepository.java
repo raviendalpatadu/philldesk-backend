@@ -34,11 +34,14 @@ public interface BillRepository extends JpaRepository<Bill, Long> {
        @Query("SELECT b FROM Bill b WHERE b.customer.id = :customerId ORDER BY b.createdAt DESC")
        List<Bill> findByCustomerIdOrderByCreatedAtDesc(@Param("customerId") Long customerId);
 
-       @Query("SELECT b FROM Bill b JOIN FETCH b.customer LEFT JOIN FETCH b.pharmacist LEFT JOIN FETCH b.prescription WHERE b.id = :id")
+       @Query("SELECT b FROM Bill b JOIN FETCH b.customer LEFT JOIN FETCH b.pharmacist LEFT JOIN FETCH b.prescription LEFT JOIN FETCH b.shippingDetails WHERE b.id = :id")
        Optional<Bill> findByIdWithDetails(@Param("id") Long id);
 
        @Query("SELECT b FROM Bill b WHERE b.pharmacist.id = :pharmacistId ORDER BY b.createdAt DESC")
        List<Bill> findByPharmacistIdOrderByCreatedAtDesc(@Param("pharmacistId") Long pharmacistId);
+
+       @Query("SELECT b FROM Bill b LEFT JOIN FETCH b.shippingDetails WHERE b.pharmacist.id = :pharmacistId AND b.paymentType = 'ONLINE' AND b.paymentStatus = 'PAID' ORDER BY b.createdAt DESC")
+       List<Bill> findOnlinePaidBillsByPharmacistWithShipping(@Param("pharmacistId") Long pharmacistId);
 
        @Query("SELECT b FROM Bill b WHERE b.createdAt BETWEEN :startDate AND :endDate")
        List<Bill> findByCreatedAtBetween(@Param("startDate") LocalDateTime startDate,

@@ -108,7 +108,7 @@ public class MedicineController {
         
         // Limit to top 10 results for performance
         List<Medicine> suggestions = medicines.stream()
-            .filter(medicine -> medicine.getIsActive() && !medicine.isExpired())
+            .filter(medicine -> medicine.getIsActive() && !medicine.isExpired() && medicine.getQuantity() > 0)
             .limit(10)
             .toList();
             
@@ -118,6 +118,19 @@ public class MedicineController {
     @PostMapping
     public ResponseEntity<Medicine> createMedicine(@RequestBody Medicine medicine) {
         try {
+            // Check if medicine with the same name, strength, dosage form, and manufacturer already exists
+            if (medicineService.existsByNameStrengthFormAndManufacturer(
+                    medicine.getName(), 
+                    medicine.getStrength(), 
+                    medicine.getDosageForm(),
+                    medicine.getManufacturer())) {
+                return ResponseEntity.badRequest()
+                    .header("X-Error-Message", "Medicine '" + medicine.getName() + 
+                           " " + medicine.getStrength() + " " + medicine.getDosageForm() + 
+                           " by " + medicine.getManufacturer() + "' already exists")
+                    .build();
+            }
+            
             Medicine savedMedicine = medicineService.saveMedicine(medicine);
             return ResponseEntity.status(HttpStatus.CREATED).body(savedMedicine);
         } catch (Exception e) {

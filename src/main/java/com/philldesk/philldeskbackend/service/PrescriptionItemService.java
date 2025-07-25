@@ -17,6 +17,7 @@ public interface PrescriptionItemService {
     PrescriptionItem savePrescriptionItem(PrescriptionItem prescriptionItem);
     PrescriptionItem updatePrescriptionItem(PrescriptionItem prescriptionItem);
     void deletePrescriptionItem(Long id);
+    void deleteAllPrescriptionItems(Long prescriptionId);
     boolean validateAvailability(PrescriptionItem prescriptionItem);
     List<PrescriptionItem> validatePrescriptionAvailability(Long prescriptionId);
 }

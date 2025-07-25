@@ -27,4 +27,6 @@ public interface MedicineService {
     void increaseStock(Long medicineId, Integer quantity);
     boolean isAvailable(Long medicineId, Integer requestedQuantity);
     boolean existsByName(String name);
+    boolean existsByNameStrengthAndForm(String name, String strength, String dosageForm);
+    boolean existsByNameStrengthFormAndManufacturer(String name, String strength, String dosageForm, String manufacturer);
 }

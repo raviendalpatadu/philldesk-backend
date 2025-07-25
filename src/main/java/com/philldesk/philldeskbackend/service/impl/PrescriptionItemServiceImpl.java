@@ -9,6 +9,8 @@ import com.philldesk.philldeskbackend.service.MedicineService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +20,8 @@ import java.util.Optional;
 @Transactional
 public class PrescriptionItemServiceImpl implements PrescriptionItemService {
 
+    private static final Logger logger = LoggerFactory.getLogger(PrescriptionItemServiceImpl.class);
+    
     private final PrescriptionItemRepository prescriptionItemRepository;
     private final MedicineService medicineService;
 
@@ -76,7 +80,23 @@ public class PrescriptionItemServiceImpl implements PrescriptionItemService {
 
     @Override
     public void deletePrescriptionItem(Long id) {
-        prescriptionItemRepository.deleteById(id);
+        // Check if the item exists before trying to delete
+        Optional<PrescriptionItem> existingItem = prescriptionItemRepository.findById(id);
+        if (existingItem.isPresent()) {
+            prescriptionItemRepository.deleteById(id);
+            // Force the deletion to be flushed immediately
+            prescriptionItemRepository.flush();
+        } else {
+            // Log the missing item but don't throw an exception to avoid breaking bulk operations
+            logger.warn("Prescription item with id {} not found for deletion", id);
+        }
+    }
+
+    @Override
+    public void deleteAllPrescriptionItems(Long prescriptionId) {
+        // Use the custom query for more efficient bulk deletion
+        prescriptionItemRepository.deleteByPrescriptionId(prescriptionId);
+        prescriptionItemRepository.flush();
     }
 
     @Override

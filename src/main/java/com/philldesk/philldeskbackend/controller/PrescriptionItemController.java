@@ -157,9 +157,8 @@ public class PrescriptionItemController {
                 return ResponseEntity.notFound().build();
             }
 
-            // Delete existing items for this prescription
-            List<PrescriptionItem> existingItems = prescriptionItemService.getPrescriptionItemsByPrescriptionId(prescriptionId);
-            existingItems.forEach(item -> prescriptionItemService.deletePrescriptionItem(item.getId()));
+            // Delete existing items for this prescription more efficiently
+            prescriptionItemService.deleteAllPrescriptionItems(prescriptionId);
 
             // Create new items
             List<PrescriptionItem> newItems = bulkUpdateDTO.getItems().stream()

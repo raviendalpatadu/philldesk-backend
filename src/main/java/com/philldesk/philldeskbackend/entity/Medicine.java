@@ -16,7 +16,9 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
-@Table(name = "medicines")
+@Table(name = "medicines", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"name", "strength", "dosage_form", "manufacturer"})
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

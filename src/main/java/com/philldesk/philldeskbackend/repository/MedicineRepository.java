@@ -21,6 +21,24 @@ public interface MedicineRepository extends JpaRepository<Medicine, Long> {
     
     Optional<Medicine> findByNameAndIsActiveTrue(String name);
     
+    // Check for duplicates with name, strength, and dosage form
+    @Query("SELECT m FROM Medicine m WHERE LOWER(m.name) = LOWER(:name) AND " +
+           "LOWER(m.strength) = LOWER(:strength) AND " +
+           "LOWER(m.dosageForm) = LOWER(:dosageForm) AND m.isActive = true")
+    Optional<Medicine> findByNameAndStrengthAndDosageForm(@Param("name") String name, 
+                                                         @Param("strength") String strength, 
+                                                         @Param("dosageForm") String dosageForm);
+    
+    // Check for duplicates with name, strength, dosage form, and manufacturer
+    @Query("SELECT m FROM Medicine m WHERE LOWER(m.name) = LOWER(:name) AND " +
+           "LOWER(m.strength) = LOWER(:strength) AND " +
+           "LOWER(m.dosageForm) = LOWER(:dosageForm) AND " +
+           "LOWER(m.manufacturer) = LOWER(:manufacturer) AND m.isActive = true")
+    Optional<Medicine> findByNameAndStrengthAndDosageFormAndManufacturer(@Param("name") String name, 
+                                                                        @Param("strength") String strength, 
+                                                                        @Param("dosageForm") String dosageForm,
+                                                                        @Param("manufacturer") String manufacturer);
+    
     @Query("SELECT m FROM Medicine m WHERE m.quantity <= m.reorderLevel AND m.isActive = true")
     List<Medicine> findLowStockMedicines();
     
