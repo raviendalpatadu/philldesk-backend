@@ -52,7 +52,7 @@ public class Prescription {
     private LocalDateTime prescriptionDate;
     
     @Column(name = "file_url", length = 500)
-    private String fileUrl; // Google Drive URL
+    private String fileUrl; // Local file system URL
     
     @Column(name = "file_name", length = 200)
     private String fileName;

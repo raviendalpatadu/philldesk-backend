@@ -20,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -41,26 +42,26 @@ public class CustomerController {
     private final PrescriptionService prescriptionService;
     private final BillService billService;
     private final UserService userService;
-    private final GoogleDriveService googleDriveService;
     private final ShippingDetailsService shippingDetailsService;
     private final MedicineService medicineService;
     private final PdfGenerationService pdfService;
+    private final LocalFileService localFileService;
 
     @Autowired
     public CustomerController(PrescriptionService prescriptionService, 
                              BillService billService,
                              UserService userService,
-                             GoogleDriveService googleDriveService,
                              ShippingDetailsService shippingDetailsService,
                               MedicineService medicineService,
-                              PdfGenerationService pdfService) {
+                              PdfGenerationService pdfService,
+                              LocalFileService localFileService) {
         this.prescriptionService = prescriptionService;
         this.billService = billService;
         this.userService = userService;
-        this.googleDriveService = googleDriveService;
         this.shippingDetailsService = shippingDetailsService;
         this.medicineService = medicineService;
         this.pdfService = pdfService;
+        this.localFileService = localFileService;
     }
 
     /**
@@ -157,8 +158,10 @@ public class CustomerController {
                 return ResponseEntity.badRequest().body(Map.of(ERROR_KEY, errorResponse));
             }
 
-            // Upload file to Google Drive
-            String fileUrl = googleDriveService.uploadFile(file);
+            // Upload file to local file system
+            logger.info("Starting file upload for prescription file: {}", file.getOriginalFilename());
+            String localFileUrl = localFileService.saveFile(file, customerId);
+            logger.info("Local file saved successfully: {}", localFileUrl);
 
             // Create prescription record
             Optional<User> customer = userService.getUserById(customerId);
@@ -172,7 +175,7 @@ public class CustomerController {
             prescription.setCustomer(customer.get());
             prescription.setDoctorName(doctorName);
             prescription.setDoctorLicense(doctorLicense);
-            prescription.setFileUrl(fileUrl);
+            prescription.setFileUrl(localFileUrl);  // Store local file URL
             prescription.setFileName(file.getOriginalFilename());
             prescription.setFileType(getFileExtension(file.getOriginalFilename()));
             prescription.setNotes(notes);
@@ -190,6 +193,7 @@ public class CustomerController {
             response.put("prescriptionNumber", savedPrescription.getPrescriptionNumber());
             response.put("status", savedPrescription.getStatus().toString());
 
+            
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, String> errorResponse = new HashMap<>();
@@ -275,6 +279,65 @@ public class CustomerController {
             logger.error("Error retrieving prescription {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    /**
+     * Serve prescription files from local file system
+     */
+    @GetMapping("/files/**")
+    public ResponseEntity<byte[]> getFile(HttpServletRequest request) {
+        try {
+            Long customerId = getCurrentUserId();
+            if (customerId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            // Get the file path after /api/customer/files/
+            String filePath = request.getRequestURI().substring(request.getRequestURI().indexOf("/files/") + 7);
+            
+            logger.info("File requested: {} by customer: {}", filePath, customerId);
+            
+            // Security check: ensure the file belongs to the current customer
+            if (!filePath.startsWith(customerId.toString() + "/")) {
+                logger.warn("Unauthorized file access attempt by customer {} for file: {}", customerId, filePath);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
+            // Get file content
+            byte[] fileContent = localFileService.getFile(filePath);
+            
+            // Determine content type
+            String contentType = determineContentType(filePath);
+            
+            // Set headers for file download/display
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentDisposition(ContentDisposition.inline().build());
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(fileContent);
+                    
+        } catch (Exception e) {
+            logger.error("Error serving file: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Determine content type based on file extension
+     */
+    private String determineContentType(String filePath) {
+        String extension = getFileExtension(filePath).toLowerCase();
+        return switch (extension) {
+            case "pdf" -> "application/pdf";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "bmp" -> "image/bmp";
+            case "webp" -> "image/webp";
+            default -> "application/octet-stream";
+        };
     }
 
     /**
